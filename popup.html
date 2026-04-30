@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Focus Guard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <div class="popup-scroll">
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <header class="popup-header">
+    <div class="header-left">
+      <div class="logo-orb"></div>
+      <div class="header-text">
+        <span class="app-name">Focus Guard</span>
+        <span class="app-tagline">Mindful browsing</span>
+      </div>
+    </div>
+
+    <!-- Master toggle -->
+    <label class="toggle-switch" aria-label="Enable Focus Guard">
+      <input type="checkbox" id="toggle-enabled" />
+      <span class="toggle-track">
+        <span class="toggle-thumb"></span>
+      </span>
+    </label>
+  </header>
+
+  <!-- ── Status bar ───────────────────────────────────────────────────────── -->
+  <div class="status-bar" id="status-bar">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text">Loading…</span>
+  </div>
+
+  <!-- ── Scrollable content ───────────────────────────────────────────────── -->
+  <main class="popup-main">
+
+    <!-- Current domain usage card -->
+    <section class="card" id="usage-card">
+      <div class="card-label">Current site</div>
+      <div class="usage-row">
+        <span id="usage-domain" class="usage-domain">—</span>
+        <span id="usage-time" class="usage-time">0:00</span>
+      </div>
+      <div class="usage-bar-track" aria-hidden="true">
+        <div class="usage-bar-fill" id="usage-bar-fill"></div>
+      </div>
+      <div class="usage-bar-legend" id="usage-bar-legend">— / —</div>
+    </section>
+
+    <section class="card">
+      <div class="card-label">Time by site</div>
+      <ul class="site-usage-list" id="site-usage-list" aria-label="Time spent per site">
+        <li class="site-usage-empty">Visit blocked sites to start tracking.</li>
+      </ul>
+    </section>
+
+    <!-- Settings -->
+    <section class="card settings-card">
+      <div class="card-label">Settings</div>
+
+      <div class="field-group">
+        <label class="field-label" for="break-interval">Break every</label>
+        <select id="break-interval" class="select">
+          <option value="30">30 minutes</option>
+          <option value="60">1 hour</option>
+          <option value="120">2 hours</option>
+        </select>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="break-duration">Break lasts</label>
+        <select id="break-duration" class="select">
+          <option value="5">5 minutes</option>
+          <option value="10">10 minutes</option>
+          <option value="15">15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60">1 hour</option>
+        </select>
+      </div>
+
+      <div class="field-group field-row">
+        <label class="field-label" for="toggle-skip">Allow "Skip break"</label>
+        <label class="toggle-switch toggle-small" aria-label="Allow skip break">
+          <input type="checkbox" id="toggle-skip" />
+          <span class="toggle-track">
+            <span class="toggle-thumb"></span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-label">Break screens</div>
+      <div class="theme-list" id="break-theme-list" aria-label="Break screen selection">
+        <button class="theme-item" type="button" data-theme="default">
+          <span class="theme-thumb theme-thumb--default" aria-hidden="true"></span>
+          <span class="theme-meta">
+            <span class="theme-title">Default calm screen</span>
+            <span class="theme-subtitle">Free</span>
+          </span>
+          <span class="theme-state">Selected</span>
+        </button>
+
+        <button class="theme-item" type="button" data-theme="cat">
+          <span class="theme-thumb theme-thumb--cat" aria-hidden="true">🐱</span>
+          <span class="theme-meta">
+            <span class="theme-title">Cat stretch animation</span>
+            <span class="theme-subtitle">Free</span>
+          </span>
+          <span class="theme-state">Select</span>
+        </button>
+
+        <button class="theme-item theme-item--locked" type="button" data-theme="forest" data-locked="true">
+          <span class="theme-thumb theme-thumb--locked" aria-hidden="true">🔒</span>
+          <span class="theme-meta">
+            <span class="theme-title">Forest breeze</span>
+            <span class="theme-subtitle">Premium</span>
+          </span>
+          <span class="theme-state">Locked</span>
+        </button>
+
+        <button class="theme-item theme-item--locked" type="button" data-theme="night" data-locked="true">
+          <span class="theme-thumb theme-thumb--locked" aria-hidden="true">🔒</span>
+          <span class="theme-meta">
+            <span class="theme-title">Night neon</span>
+            <span class="theme-subtitle">Premium</span>
+          </span>
+          <span class="theme-state">Locked</span>
+        </button>
+
+        <button class="theme-item theme-item--locked" type="button" data-theme="space" data-locked="true">
+          <span class="theme-thumb theme-thumb--locked" aria-hidden="true">🔒</span>
+          <span class="theme-meta">
+            <span class="theme-title">Space float</span>
+            <span class="theme-subtitle">Premium</span>
+          </span>
+          <span class="theme-state">Locked</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Custom domains -->
+    <section class="card">
+      <div class="card-label">Blocked sites</div>
+
+      <!-- Built-in list -->
+      <ul class="domain-list" id="builtin-list" aria-label="Built-in blocked sites">
+        <li class="domain-item domain-builtin">
+          <span class="domain-favicon" aria-hidden="true">📷</span>
+          instagram.com
+          <span class="domain-badge">built-in</span>
+        </li>
+        <li class="domain-item domain-builtin">
+          <span class="domain-favicon" aria-hidden="true">👥</span>
+          facebook.com
+          <span class="domain-badge">built-in</span>
+        </li>
+        <li class="domain-item domain-builtin">
+          <span class="domain-favicon" aria-hidden="true">𝕏</span>
+          twitter.com / x.com
+          <span class="domain-badge">built-in</span>
+        </li>
+      </ul>
+
+      <!-- Custom domain list -->
+      <ul class="domain-list" id="custom-domain-list" aria-label="Custom blocked sites">
+        <!-- Populated by popup.js -->
+      </ul>
+
+      <!-- Add domain input -->
+      <div class="add-domain-row">
+        <input
+          type="text"
+          id="custom-domain-input"
+          class="text-input"
+          placeholder="e.g. reddit.com"
+          aria-label="Add custom domain"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="add-domain-btn" class="btn btn-icon" aria-label="Add domain" title="Add">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-error" id="domain-error" role="alert" aria-live="polite"></div>
+    </section>
+
+    <!-- Actions -->
+    <div class="actions-row">
+      <button id="save-btn" class="btn btn-primary">Save settings</button>
+      <button id="reset-btn" class="btn btn-ghost" aria-label="Reset usage statistics">Reset usage</button>
+    </div>
+
+    <div class="save-status" id="save-status" role="status" aria-live="polite"></div>
+
+  </main>
+  </div>
+
+  <footer class="popup-footer">
+    <div class="subscribe-copy">Unlock more funny break screen</div>
+    <button id="subscribe-btn" class="btn-subscribe" type="button" aria-label="Upgrade to premium subscription">
+      ★ Try Pro for $8.99/month
+    </button>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

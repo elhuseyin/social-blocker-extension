@@ -1,0 +1,418 @@
+/**
+ * content.js — Focus Guard Content Script
+ * Injected into blocked social media pages.
+ * Responsibilities:
+ *   - Listen for break start/end messages from the background service worker
+ *   - Inject the full-screen overlay UI with countdown timer
+ *   - Freeze/unfreeze page interaction (scroll, clicks, keyboard)
+ *   - Update countdown every second
+ *   - Send SKIP_BREAK to background when user clicks Skip
+ */
+
+(function () {
+  "use strict";
+
+  /** Prevent duplicate listeners when background programmatically reinjects this file. */
+  const CS_INIT_KEY = "__FOCUS_GUARD_CONTENT_SCRIPT_V2__";
+  if (globalThis[CS_INIT_KEY]) {
+    return;
+  }
+  globalThis[CS_INIT_KEY] = true;
+
+  const LOG_PREFIX = "[FocusGuard CS]";
+
+  // ─── State ──────────────────────────────────────────────────────────────────
+
+  let overlayEl       = null;   // DOM reference to the overlay root
+  let countdownTimer  = null;   // setInterval id for live countdown
+  let breakEndsAt     = null;   // epoch ms
+  let activeBreakScreen = "default"; // currently selected break overlay theme
+  let frozenListeners = [];     // cleanup list for event listeners
+  let pausedMediaEls  = [];     // media elements paused by the extension
+
+  // ─── Logging ────────────────────────────────────────────────────────────────
+
+  function log(...args) {
+    console.log(LOG_PREFIX, ...args);
+  }
+
+  function extractDomain(url) {
+    if (!url || !url.startsWith("http")) return null;
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return null;
+    }
+  }
+
+  function isBlockedDomainForSettings(domain, settings) {
+    if (!domain || !settings) return false;
+    const builtIn = ["instagram.com", "facebook.com", "twitter.com", "x.com"];
+    const custom = Array.isArray(settings.customDomains) ? settings.customDomains : [];
+    const all = [...builtIn, ...custom];
+    return all.some((blocked) => domain === blocked || domain.endsWith(`.${blocked}`));
+  }
+
+  /** True if event path includes our overlay (works with open shadow DOM / retargeting). */
+  function eventTargetsOverlay(e) {
+    if (!overlayEl) return false;
+    if (overlayEl.contains(e.target)) return true;
+    const path = typeof e.composedPath === "function" ? e.composedPath() : [];
+    for (let i = 0; i < path.length; i++) {
+      const n = path[i];
+      if (n === overlayEl) return true;
+      if (n && n.nodeType === 1 && overlayEl.contains(n)) return true;
+    }
+    return false;
+  }
+
+  /** Prevent all user interactions while overlay is active. */
+  function freezePage() {
+    const stopEvent = (e) => {
+      if (eventTargetsOverlay(e)) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    };
+
+    const interactionEvents = [
+      "click", "mousedown", "mouseup", "mousemove", "dblclick", "contextmenu",
+      "pointerdown", "pointerup", "pointermove", "pointercancel",
+      "keydown", "keyup", "keypress",
+      "touchstart", "touchend", "touchmove", "touchcancel",
+      "wheel", "scroll"
+    ];
+    const roots = [document, window];
+    roots.forEach((root) => {
+      interactionEvents.forEach((evt) => {
+        root.addEventListener(evt, stopEvent, { capture: true, passive: false });
+        frozenListeners.push({ root, evt, fn: stopEvent });
+      });
+    });
+
+    document.documentElement.style.overflow = "hidden";
+    if (document.body) document.body.style.overflow = "hidden";
+    log("Page frozen.");
+  }
+
+  /** Re-enable page interaction. */
+  function unfreezePage() {
+    frozenListeners.forEach(({ root, evt, fn }) => {
+      (root || document).removeEventListener(evt, fn, { capture: true });
+    });
+    frozenListeners = [];
+
+    document.documentElement.style.overflow = "";
+    if (document.body) document.body.style.overflow = "";
+    log("Page unfrozen.");
+  }
+
+  /** Pause currently playing media and remember what we paused. */
+  function pausePageMedia() {
+    pausedMediaEls = [];
+    const mediaEls = document.querySelectorAll("video, audio");
+    mediaEls.forEach((el) => {
+      if (!el.paused && !el.ended) {
+        try {
+          el.pause();
+          pausedMediaEls.push(el);
+        } catch {
+          // Ignore pause failures from site-level restrictions
+        }
+      }
+    });
+    if (pausedMediaEls.length) {
+      log("Paused media elements:", pausedMediaEls.length);
+    }
+  }
+
+  /** Resume only media elements that we paused during break start. */
+  function resumePageMedia() {
+    if (!pausedMediaEls.length) return;
+    pausedMediaEls.forEach((el) => {
+      try {
+        if (el.isConnected && el.paused && !el.ended) {
+          const result = el.play();
+          if (result && typeof result.catch === "function") {
+            result.catch(() => {
+              // Autoplay may be blocked by browser policy; safe to ignore
+            });
+          }
+        }
+      } catch {
+        // Ignore individual resume failures
+      }
+    });
+    log("Attempted to resume media elements:", pausedMediaEls.length);
+    pausedMediaEls = [];
+  }
+
+  // ─── Countdown ───────────────────────────────────────────────────────────────
+
+  /** Format epoch ms remaining into MM:SS string. */
+  function formatCountdown(endsAt) {
+    const remaining = Math.max(0, endsAt - Date.now());
+    const totalSec  = Math.ceil(remaining / 1000);
+    const mins      = Math.floor(totalSec / 60);
+    const secs      = totalSec % 60;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  }
+
+  function startCountdown(endsAt) {
+    stopCountdown();
+    const timerEl = document.getElementById("fg-countdown");
+    if (!timerEl) return;
+
+    timerEl.textContent = formatCountdown(endsAt);
+
+    countdownTimer = setInterval(() => {
+      if (!timerEl) return stopCountdown();
+      const remaining = endsAt - Date.now();
+      timerEl.textContent = formatCountdown(endsAt);
+
+      // Pulse animation on the last 10 seconds
+      if (remaining <= 10000) {
+        timerEl.classList.add("fg-pulse");
+      }
+
+      if (remaining <= 0) {
+        stopCountdown();
+      }
+    }, 1000);
+  }
+
+  function stopCountdown() {
+    if (countdownTimer) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+  }
+
+  // ─── Overlay ─────────────────────────────────────────────────────────────────
+
+  function buildOverlay(endsAt, allowSkip, breakScreen) {
+    const overlay = document.createElement("div");
+    overlay.id = "fg-overlay";
+    overlay.classList.add(`fg-theme-${breakScreen || "default"}`);
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Focus break in progress");
+
+    const isCatTheme = breakScreen === "cat";
+    const animationMarkup = isCatTheme
+      ? `
+        <div id="fg-animation-container" class="fg-cat-wrap" aria-hidden="true">
+          <div class="fg-cat">🐱</div>
+          <div class="fg-cat-shadow"></div>
+        </div>
+      `
+      : `
+        <div id="fg-animation-container" aria-hidden="true">
+          <div id="fg-orb"></div>
+        </div>
+      `;
+
+    const headline = isCatTheme ? "Cat break time" : "Time for a break";
+    const subtext = isCatTheme
+      ? "Stretch with your cat, breathe, and come back focused."
+      : "Step away, breathe. Your focus will thank you.";
+
+    overlay.innerHTML = `
+      <div id="fg-panel">
+
+        ${animationMarkup}
+
+        <div id="fg-content">
+          <div id="fg-eyebrow">Focus Guard</div>
+          <h1 id="fg-headline">${headline}</h1>
+          <p id="fg-subtext">${subtext}</p>
+
+          <div id="fg-timer-wrapper" aria-live="polite" aria-label="Time remaining">
+            <div id="fg-timer-label">back in</div>
+            <div id="fg-countdown">00:00</div>
+          </div>
+
+          ${allowSkip ? `
+          <button id="fg-skip-btn" type="button" aria-label="Skip this break">
+            Skip break
+          </button>
+          ` : ""}
+        </div>
+
+      </div>
+    `;
+
+    // Skip button listener — isolated from frozen events by pointer-events CSS
+    if (allowSkip) {
+      const skipBtn = overlay.querySelector("#fg-skip-btn");
+      if (skipBtn) {
+        skipBtn.addEventListener("click", async (e) => {
+          e.stopImmediatePropagation();
+          log("Skip break clicked.");
+          try {
+            await chrome.runtime.sendMessage({ type: "SKIP_BREAK" });
+          } catch (err) {
+            log("Skip message error:", err);
+          }
+          removeOverlay();
+        }, { capture: true });
+      }
+    }
+
+    return overlay;
+  }
+
+  /** Mount overlay on body when possible so fixed positioning covers the full tab (SPAs, YouTube). */
+  function mountOverlay(overlay) {
+    const attach = () => {
+      const parent = document.body || document.documentElement;
+      try {
+        parent.appendChild(overlay);
+      } catch (err) {
+        log("appendChild failed, retrying on documentElement:", err);
+        document.documentElement.appendChild(overlay);
+      }
+    };
+    const moveToBodyIfNeeded = () => {
+      try {
+        if (overlay.parentNode && document.body && overlay.parentNode !== document.body) {
+          document.body.appendChild(overlay);
+        }
+      } catch (err) {
+        log("Move overlay to body failed:", err);
+      }
+    };
+    attach();
+    if (document.body && overlay.parentNode !== document.body) {
+      moveToBodyIfNeeded();
+    } else if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", moveToBodyIfNeeded, { once: true });
+    }
+  }
+
+  function injectOverlay(endsAt, allowSkip, breakScreen = "default") {
+    // Don't inject twice
+    if (overlayEl) {
+      updateOverlay(endsAt, allowSkip, breakScreen);
+      return;
+    }
+
+    breakEndsAt = endsAt;
+    activeBreakScreen = breakScreen || "default";
+    overlayEl   = buildOverlay(endsAt, allowSkip, activeBreakScreen);
+    mountOverlay(overlayEl);
+    document.documentElement.classList.add("fg-blocked");
+    document.documentElement.style.overflow = "hidden";
+
+    // Show overlay immediately so it always captures hits (opacity 0 can let clicks through).
+    overlayEl.classList.add("fg-visible");
+
+    freezePage();
+    pausePageMedia();
+    startCountdown(endsAt);
+    log("Overlay injected. Break ends at:", new Date(endsAt).toISOString());
+  }
+
+  /** Update an existing overlay with new end time (e.g. after SW restart). */
+  function updateOverlay(endsAt, allowSkip, breakScreen = "default") {
+    if (overlayEl && breakScreen !== activeBreakScreen) {
+      // Theme changed while break is active; rebuild overlay with new theme.
+      const hadOverlay = overlayEl;
+      removeOverlay();
+      if (hadOverlay) {
+        injectOverlay(endsAt, allowSkip, breakScreen);
+        return;
+      }
+    }
+    breakEndsAt = endsAt;
+    startCountdown(endsAt);
+    log("Overlay updated. Break ends at:", new Date(endsAt).toISOString());
+  }
+
+  function removeOverlay() {
+    if (!overlayEl) return;
+
+    overlayEl.classList.remove("fg-visible");
+    overlayEl.classList.add("fg-hiding");
+    document.documentElement.classList.remove("fg-blocked");
+    document.documentElement.style.overflow = "";
+
+    // Remove after transition ends
+    overlayEl.addEventListener("transitionend", () => {
+      overlayEl?.remove();
+      overlayEl = null;
+    }, { once: true });
+
+
+    setTimeout(() => {
+      if (overlayEl) {
+        overlayEl.remove();
+        overlayEl = null;
+      }
+    }, 700); // match your CSS transition (0.6s)
+
+    stopCountdown();
+    unfreezePage();
+    resumePageMedia();
+    log("Overlay removed.");
+  }
+
+  // ─── Message Listener ────────────────────────────────────────────────────────
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    log("Message received:", message.type);
+
+    switch (message.type) {
+
+      case "PING":
+        sendResponse({ ok: true });
+        break;
+
+      case "START_BREAK":
+        injectOverlay(message.endsAt, message.allowSkip !== false, message.breakScreen || "default");
+        sendResponse({ ok: true });
+        break;
+
+      case "BREAK_TICK":
+        // Heartbeat from background — re-inject if overlay was lost (e.g. hard refresh)
+        if (!overlayEl) {
+          injectOverlay(message.endsAt, message.allowSkip !== false, message.breakScreen || "default");
+        } else {
+          updateOverlay(message.endsAt, message.allowSkip !== false, message.breakScreen || "default");
+        }
+        sendResponse({ ok: true });
+        break;
+
+      case "END_BREAK":
+        removeOverlay();
+        sendResponse({ ok: true });
+        break;
+
+      default:
+        sendResponse({ ok: false });
+    }
+  });
+
+  // ─── On Load — Check if break is already active ───────────────────────────
+
+  (async function checkInitialBreakState() {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: "GET_STATUS" });
+      const currentDomain = extractDomain(window.location.href);
+      const isBlockedHere = isBlockedDomainForSettings(currentDomain, response?.settings);
+      if (response && isBlockedHere && response.breakActive && response.breakEndsAt) {
+        log("Break already active on page load. Injecting overlay.");
+        injectOverlay(
+          response.breakEndsAt,
+          response.settings?.allowSkip !== false,
+          response.settings?.breakScreen || "default"
+        );
+      } else if (!isBlockedHere) {
+        log("Current domain not blocked. Overlay inactive on this site.");
+      }
+    } catch (err) {
+      log("Could not check initial break state:", err);
+    }
+  })();
+
+  log("Content script loaded on:", window.location.hostname);
+})();
