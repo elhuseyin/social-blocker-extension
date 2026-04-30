@@ -55,7 +55,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["overlay.css"],
+      "resources": ["overlay.css", "entitlements.js"],
       "matches": ["<all_urls>"]
     }
   ]

@@ -4,6 +4,8 @@
  * Runs as a Manifest V3 service worker (persistent via alarms).
  */
 
+import { getEntitlements, resolveBreakScreen } from "./entitlements.js";
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const DEFAULT_SETTINGS = {
@@ -202,10 +204,21 @@ async function persistState() {
   });
 }
 
+/** If stored break screen is premium and user is not entitled, persist `default`. */
+async function normalizeBreakScreenInState() {
+  const next = await resolveBreakScreen(state.settings?.breakScreen);
+  if (!state.settings || state.settings.breakScreen === next) return;
+  const newSettings = { ...state.settings, breakScreen: next };
+  state.settings = newSettings;
+  await chrome.storage.local.set({ settings: newSettings });
+  log("Break screen normalized to:", next);
+}
+
 /** Load settings + usage + break state from storage. */
 async function loadState() {
   const data = await chrome.storage.local.get(["settings", "usage", "breakActive", "breakEndsAt"]);
   state.settings    = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+  await normalizeBreakScreenInState();
   state.usage       = data.usage       || {};
   state.breakActive = data.breakActive || false;
   state.breakEndsAt = data.breakEndsAt || null;
@@ -245,10 +258,11 @@ async function startBreak() {
   state.breakEndsAt = Date.now() + breakMs;
   await persistState();
   log("Break started. Ends at:", new Date(state.breakEndsAt).toISOString());
+  const breakScreen = await resolveBreakScreen(state.settings.breakScreen);
   await notifyAllBlockedTabs("START_BREAK", {
     endsAt: state.breakEndsAt,
     allowSkip: state.settings.allowSkip,
-    breakScreen: state.settings.breakScreen
+    breakScreen
   });
 }
 
@@ -302,10 +316,11 @@ async function onTick() {
     }
     // Keep notifying the active tab so its countdown stays fresh after navigations
     if (state.breakActive && state.activeTabId && isBlockedDomain(state.activeTabDomain)) {
+      const breakScreen = await resolveBreakScreen(state.settings.breakScreen);
       await notifyTab(state.activeTabId, "BREAK_TICK", {
         endsAt:    state.breakEndsAt,
         allowSkip: state.settings.allowSkip,
-        breakScreen: state.settings.breakScreen
+        breakScreen
       });
     }
     // Advance tick baseline during breaks so the first tick after break does not
@@ -349,10 +364,11 @@ async function handleTabChange(tabId, url) {
 
   // If a break is already active and the user navigated to a blocked site, re-trigger overlay
   if (state.breakActive && state.activeTabDomain) {
+    const breakScreen = await resolveBreakScreen(state.settings.breakScreen);
     await notifyTab(tabId, "START_BREAK", {
       endsAt:    state.breakEndsAt,
       allowSkip: state.settings.allowSkip,
-      breakScreen: state.settings.breakScreen
+      breakScreen
     });
   }
 }
@@ -405,18 +421,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: true });
         break;
 
-      case "GET_STATUS":
+      case "GET_STATUS": {
+        const { isSubscribed, devMode } = await getEntitlements();
         sendResponse({
           breakActive:   state.breakActive,
           breakEndsAt:   state.breakEndsAt,
           usage:         state.usage,
           settings:      state.settings,
-          activeDomain:  state.activeTabDomain
+          activeDomain:  state.activeTabDomain,
+          isSubscribed,
+          devMode
         });
         break;
+      }
 
       case "SETTINGS_UPDATED":
         state.settings = { ...DEFAULT_SETTINGS, ...message.settings };
+        await normalizeBreakScreenInState();
         log("Settings updated:", state.settings);
         sendResponse({ ok: true });
         break;
@@ -442,6 +463,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.settings) {
     state.settings = { ...DEFAULT_SETTINGS, ...changes.settings.newValue };
     log("Settings synced from storage:", state.settings);
+  }
+  if (changes.settings || changes.devMode || changes.subscribed || changes.dev_mode) {
+    void normalizeBreakScreenInState();
   }
 });
 
@@ -495,10 +519,11 @@ async function init() {
       await endBreak(false); // break already over
     } else {
       log("Resuming active break from storage.");
+      const breakScreen = await resolveBreakScreen(state.settings.breakScreen);
       await notifyAllBlockedTabs("START_BREAK", {
         endsAt:    state.breakEndsAt,
         allowSkip: state.settings.allowSkip,
-        breakScreen: state.settings.breakScreen
+        breakScreen
       });
     }
   }
