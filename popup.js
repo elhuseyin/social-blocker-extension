@@ -5,6 +5,8 @@
  */
 
 import { getEntitlements, resolveBreakScreen } from "./entitlements.js";
+import { getWeeklyBreakSummary } from "./break-analytics.js";
+import { renderWeeklyBreakChart } from "./weekly-analytics-chart.js";
 
 const LOG_PREFIX = "[FocusGuard Popup]";
 const SUBSCRIPTION_URL = "https://your-subscription-page.example.com";
@@ -15,8 +17,16 @@ const DEFAULT_SETTINGS = {
   breakDuration: 10,
   allowSkip:     true,
   breakScreen:   "default",
-  customDomains: []
+  customDomains: [],
+  disabledBuiltIns: []
 };
+
+/** Default blocked presets (same hostnames as background). Removing adds hostnames to `disabledBuiltIns`. */
+const BUILTIN_PRESETS = [
+  { id: "instagram", label: "instagram.com", icon: "📷", domains: ["instagram.com"] },
+  { id: "facebook", label: "facebook.com", icon: "👥", domains: ["facebook.com"] },
+  { id: "twitter", label: "x.com / twitter.com", icon: "𝕏", domains: ["twitter.com", "x.com"] }
+];
 
 // ─── Element refs ────────────────────────────────────────────────────────
 
@@ -38,6 +48,7 @@ const els = {
   usageBarLegend:    $("usage-bar-legend"),
   siteUsageList:     $("site-usage-list"),
 
+  builtinList:       $("builtin-list"),
   customDomainList:  $("custom-domain-list"),
   customDomainInput: $("custom-domain-input"),
   addDomainBtn:      $("add-domain-btn"),
@@ -47,8 +58,16 @@ const els = {
   devModeBadge:      $("dev-mode-badge"),
 
   saveBtn:           $("save-btn"),
-  resetBtn:          $("reset-btn"),
-  saveStatus:        $("save-status")
+  saveStatus:        $("save-status"),
+
+  analyticsCanvas:   $("weekly-break-chart"),
+  analyticsTooltip:  $("analytics-chart-tooltip"),
+  analyticsEmpty:    $("analytics-empty"),
+  analyticsGate:     $("analytics-premium-gate"),
+  analyticsInner:    $("analytics-chart-inner"),
+  analyticsWeekThis: $("analytics-week-this"),
+  analyticsWeekLast: $("analytics-week-last"),
+  analyticsUpgrade:  $("analytics-upgrade-btn")
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -64,7 +83,7 @@ function formatMs(ms) {
   return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
-/** Sum of all tracked usage entries (all blocked sites this session). */
+/** Sum of all tracked usage entries (all tracked sites this session). */
 function sumUsageMs(usage) {
   return Object.values(usage || {}).reduce((acc, ms) => acc + (Number(ms) || 0), 0);
 }
@@ -90,6 +109,35 @@ function validateDomain(raw) {
 }
 
 // ─── Custom domain list UI ────────────────────────────────────────────────
+
+function isBuiltinPresetRemoved(disabledBuiltIns, preset) {
+  const dis = new Set(disabledBuiltIns || []);
+  return preset.domains.every((d) => dis.has(d));
+}
+
+function renderBuiltinPresets(settings) {
+  if (!els.builtinList) return;
+  const disabled = settings.disabledBuiltIns || [];
+  els.builtinList.innerHTML = "";
+
+  BUILTIN_PRESETS.forEach((preset) => {
+    if (isBuiltinPresetRemoved(disabled, preset)) return;
+
+    const li = document.createElement("li");
+    li.className = "domain-item domain-builtin";
+    li.innerHTML = `
+        <span class="domain-favicon" aria-hidden="true">${preset.icon}</span>
+        <span class="domain-text">${escapeHtml(preset.label)}</span>
+        <span class="domain-badge">built-in</span>
+        <button type="button" class="btn-remove btn-remove-builtin" data-builtin-id="${escapeHtml(preset.id)}" aria-label="Remove ${escapeHtml(preset.label)} from tracked sites" title="Remove">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </button>
+      `;
+    els.builtinList.appendChild(li);
+  });
+}
 
 function renderCustomDomains(domains) {
   els.customDomainList.innerHTML = "";
@@ -129,8 +177,13 @@ function domainIcon(domain) {
 // ─── State / Storage ──────────────────────────────────────────────────────
 
 let currentSettings = { ...DEFAULT_SETTINGS };
+/** Theme choice in the list (may differ from storage until Save). */
+let breakScreenDraft = DEFAULT_SETTINGS.breakScreen;
 let currentStatus   = null;
 let entitlementsCache = { isSubscribed: false, devMode: false };
+
+let weeklyChartTeardown = null;
+let analyticsWeekOffset = 0;
 
 function isPremiumUnlocked() {
   return entitlementsCache.isSubscribed;
@@ -158,8 +211,12 @@ async function refreshEntitlementsUI() {
   entitlementsCache = { isSubscribed, devMode };
   applyPremiumThemeState();
   renderDevModeBadge();
-  setSelectedBreakTheme(currentSettings.breakScreen || "default");
+  breakScreenDraft = await resolveBreakScreen(
+    currentSettings.breakScreenPending ?? currentSettings.breakScreen
+  );
+  setSelectedBreakTheme(breakScreenDraft);
   log("Entitlements:", entitlementsCache);
+  void refreshWeeklyAnalytics();
 }
 
 /** Console helpers — same as chrome.storage.local.set({ devMode: true/false }). */
@@ -170,10 +227,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (changes.settings) {
     currentSettings = { ...DEFAULT_SETTINGS, ...changes.settings.newValue };
-    applySettingsToUI(currentSettings);
+    void applySettingsToUI(currentSettings);
   }
   if (changes.devMode || changes.subscribed || changes.dev_mode || changes.settings) {
     void refreshEntitlementsUI();
+  }
+  if (changes.breakSessionLog && isPremiumUnlocked()) {
+    void refreshWeeklyAnalytics();
   }
 });
 
@@ -187,17 +247,21 @@ async function loadSettings() {
       settings: { ...(data.settings || {}), breakScreen: resolved }
     });
   }
-  applySettingsToUI(currentSettings);
+  await applySettingsToUI(currentSettings);
   log("Settings loaded:", currentSettings);
 }
 
-function applySettingsToUI(settings) {
+async function applySettingsToUI(settings) {
   els.toggleEnabled.checked  = settings.enabled;
   els.breakInterval.value    = String(settings.breakInterval);
   els.breakDuration.value    = String(settings.breakDuration);
   els.toggleSkip.checked     = settings.allowSkip;
+  renderBuiltinPresets(settings);
   renderCustomDomains(settings.customDomains || []);
-  setSelectedBreakTheme(settings.breakScreen || "default");
+  breakScreenDraft = await resolveBreakScreen(
+    settings.breakScreenPending ?? settings.breakScreen
+  );
+  setSelectedBreakTheme(breakScreenDraft);
 }
 
 function collectSettingsFromUI() {
@@ -206,8 +270,9 @@ function collectSettingsFromUI() {
     breakInterval: parseInt(els.breakInterval.value, 10),
     breakDuration: parseInt(els.breakDuration.value, 10),
     allowSkip:     els.toggleSkip.checked,
-    breakScreen:   currentSettings.breakScreen || "default",
-    customDomains: currentSettings.customDomains || []
+    breakScreen:   breakScreenDraft || "default",
+    customDomains: currentSettings.customDomains || [],
+    disabledBuiltIns: currentSettings.disabledBuiltIns || []
   };
 }
 
@@ -229,18 +294,44 @@ function setSelectedBreakTheme(themeName) {
 }
 
 async function saveSettings() {
-  const settings = collectSettingsFromUI();
-  await chrome.storage.local.set({ settings });
-  currentSettings = settings;
+  let status = currentStatus;
+  try {
+    status = await chrome.runtime.sendMessage({ type: "GET_STATUS" });
+  } catch {
+    // BG might be restarting
+  }
+  const breakActive = Boolean(status?.breakActive);
+
+  const resolvedDraft = await resolveBreakScreen(breakScreenDraft);
+  const base = collectSettingsFromUI();
+
+  if (breakActive) {
+    base.breakScreen = currentSettings.breakScreen;
+    if (resolvedDraft !== currentSettings.breakScreen) {
+      base.breakScreenPending = resolvedDraft;
+    } else {
+      delete base.breakScreenPending;
+    }
+  } else {
+    base.breakScreen = resolvedDraft;
+    delete base.breakScreenPending;
+  }
+
+  await chrome.storage.local.set({ settings: base });
+  currentSettings = base;
 
   try {
-    await chrome.runtime.sendMessage({ type: "SETTINGS_UPDATED", settings });
+    await chrome.runtime.sendMessage({ type: "SETTINGS_UPDATED", settings: base });
   } catch {
     // BG might be restarting
   }
 
-  log("Settings saved:", settings);
-  showSaveStatus("✓ Settings saved");
+  log("Settings saved:", base);
+  if (breakActive && base.breakScreenPending) {
+    showSaveStatus("✓ Saved — break screen updates when this break ends");
+  } else {
+    showSaveStatus("✓ Settings saved");
+  }
 }
 
 // ─── Status / Usage UI ───────────────────────────────────────────────────
@@ -295,6 +386,49 @@ function updateStatusUI() {
   renderSiteUsageList(usage, intMs);
 }
 
+function setAnalyticsWeekToggleUI() {
+  if (!els.analyticsWeekThis || !els.analyticsWeekLast) return;
+  els.analyticsWeekThis.classList.toggle("analytics-seg--active", analyticsWeekOffset === 0);
+  els.analyticsWeekLast.classList.toggle("analytics-seg--active", analyticsWeekOffset === 1);
+}
+
+async function refreshWeeklyAnalytics() {
+  if (!els.analyticsCanvas || !els.analyticsInner || !els.analyticsGate) return;
+
+  const unlocked = isPremiumUnlocked();
+  els.analyticsGate.hidden = unlocked;
+  els.analyticsInner.classList.toggle("analytics-chart-inner--locked", !unlocked);
+
+  if (weeklyChartTeardown) {
+    weeklyChartTeardown();
+    weeklyChartTeardown = null;
+  }
+
+  const s = await getWeeklyBreakSummary(analyticsWeekOffset);
+  const byDay = s.byDay;
+  const hasData = s.hasData;
+  /** @type {number | null} */
+  const dailyAverage = hasData ? s.dailyAverage : null;
+
+  if (els.analyticsEmpty) {
+    els.analyticsEmpty.hidden = !unlocked || hasData;
+  }
+
+  weeklyChartTeardown = renderWeeklyBreakChart(els.analyticsCanvas, byDay, {
+    dailyAverage,
+    onHoverLabel: (label) => {
+      if (!els.analyticsTooltip) return;
+      if (label) {
+        els.analyticsTooltip.textContent = label;
+        els.analyticsTooltip.classList.add("is-visible");
+      } else {
+        els.analyticsTooltip.textContent = "";
+        els.analyticsTooltip.classList.remove("is-visible");
+      }
+    }
+  });
+}
+
 function renderSiteUsageList(usage, intervalMs) {
   if (!els.siteUsageList) return;
   const entries = Object.entries(usage || {})
@@ -302,7 +436,7 @@ function renderSiteUsageList(usage, intervalMs) {
     .sort((a, b) => b[1] - a[1]);
 
   if (!entries.length) {
-    els.siteUsageList.innerHTML = `<li class="site-usage-empty">Visit blocked sites to start tracking.</li>`;
+    els.siteUsageList.innerHTML = `<li class="site-usage-empty">Visit tracked sites to start tracking.</li>`;
     return;
   }
 
@@ -331,18 +465,6 @@ els.saveBtn.addEventListener("click", async () => {
     await saveSettings();
   } finally {
     els.saveBtn.disabled = false;
-  }
-});
-
-/** Reset usage */
-els.resetBtn.addEventListener("click", async () => {
-  if (!confirm("Reset all usage statistics?")) return;
-  try {
-    await chrome.runtime.sendMessage({ type: "RESET_USAGE" });
-    showSaveStatus("Usage stats reset");
-    await fetchStatus();
-  } catch (err) {
-    showSaveStatus("Error resetting usage", true);
   }
 });
 
@@ -386,6 +508,22 @@ els.customDomainList.addEventListener("click", (e) => {
   log("Custom domain removed:", domain);
 });
 
+/** Remove built-in preset (still saved as default for new installs; this user disables those hostnames) */
+if (els.builtinList) {
+  els.builtinList.addEventListener("click", (e) => {
+    const btn = e.target.closest(".btn-remove-builtin");
+    if (!btn) return;
+    const id = btn.dataset.builtinId;
+    const preset = BUILTIN_PRESETS.find((p) => p.id === id);
+    if (!preset) return;
+    const disabled = new Set(currentSettings.disabledBuiltIns || []);
+    preset.domains.forEach((d) => disabled.add(d));
+    currentSettings.disabledBuiltIns = [...disabled];
+    renderBuiltinPresets(currentSettings);
+    log("Built-in preset removed:", id, preset.domains);
+  });
+}
+
 if (els.breakThemeList) {
   els.breakThemeList.addEventListener("click", (e) => {
     const btn = e.target.closest(".theme-item");
@@ -394,9 +532,9 @@ if (els.breakThemeList) {
       showSaveStatus("Premium screen. Unlock with subscription.", true);
       return;
     }
-    currentSettings.breakScreen = btn.dataset.theme || "default";
-    setSelectedBreakTheme(currentSettings.breakScreen);
-    log("Break screen selected:", currentSettings.breakScreen);
+    breakScreenDraft = btn.dataset.theme || "default";
+    setSelectedBreakTheme(breakScreenDraft);
+    log("Break screen draft:", breakScreenDraft, "(click Save to apply)");
   });
 }
 
@@ -411,10 +549,35 @@ if (els.subscribeBtn) {
   });
 }
 
+if (els.analyticsUpgrade) {
+  els.analyticsUpgrade.addEventListener("click", async () => {
+    try {
+      await chrome.tabs.create({ url: SUBSCRIPTION_URL });
+    } catch (err) {
+      log("Failed to open subscription page:", err);
+      showSaveStatus("Could not open subscription page", true);
+    }
+  });
+}
+
+if (els.analyticsWeekThis && els.analyticsWeekLast) {
+  els.analyticsWeekThis.addEventListener("click", () => {
+    analyticsWeekOffset = 0;
+    setAnalyticsWeekToggleUI();
+    void refreshWeeklyAnalytics();
+  });
+  els.analyticsWeekLast.addEventListener("click", () => {
+    analyticsWeekOffset = 1;
+    setAnalyticsWeekToggleUI();
+    void refreshWeeklyAnalytics();
+  });
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────
 
 async function init() {
   await loadSettings();
+  setAnalyticsWeekToggleUI();
   await refreshEntitlementsUI();
   await fetchStatus();
 

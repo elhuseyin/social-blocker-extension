@@ -3,7 +3,15 @@
  * devMode in chrome.storage.local unlocks premium for local testing only (default off).
  */
 
-const PREMIUM_BREAK_SCREENS = new Set(["forest", "night", "space", "cooked"]);
+const PREMIUM_BREAK_SCREENS = new Set([
+  "forest",
+  "night",
+  "space",
+  "cooked",
+  "breath",
+  "mycat",
+  "sleepingdog"
+]);
 
 /** One-time migration from legacy dev_mode key. */
 async function migrateLegacyDevMode() {
@@ -34,7 +42,8 @@ export function isPremiumBreakScreen(screen) {
 
 export async function resolveBreakScreen(screen) {
   const { isSubscribed } = await getEntitlements();
-  const id = screen || "default";
+  let id = screen || "default";
+  if (id === "monkeys" || id === "crazydog") id = "default";
   if (isPremiumBreakScreen(id) && !isSubscribed) return "default";
   return id;
 }

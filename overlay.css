@@ -24,9 +24,11 @@
   align-items: center;
   justify-content: center;
 
-  background: rgba(10, 10, 16, 0.62);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  /* Blur only — no dimming scrim (panel still provides contrast) */
+  background: transparent;
+  /* ~5% backdrop blur (14px reference × 0.05) — all break themes */
+  backdrop-filter: blur(0.7px);
+  -webkit-backdrop-filter: blur(0.7px);
 
   /* Fade in */
   opacity: 0;
@@ -148,11 +150,497 @@
   gap: 14px;
 }
 
+/* Space float — astronaut is fixed on the viewport; panel + timer stay separate */
+#fg-overlay.fg-theme-space {
+  background: transparent;
+}
+
+/* Static star field (CSS only, behind panel + astronaut) */
+#fg-overlay.fg-theme-space::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.92;
+  background-image:
+    radial-gradient(circle at 5% 9%, rgba(255, 255, 255, 0.95) 0.45px, transparent 1.35px),
+    radial-gradient(circle at 14% 4%, rgba(224, 242, 254, 0.65) 0.4px, transparent 1.1px),
+    radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.85) 0.5px, transparent 1.4px),
+    radial-gradient(circle at 31% 7%, rgba(255, 255, 255, 0.5) 0.35px, transparent 1px),
+    radial-gradient(circle at 38% 26%, rgba(241, 250, 255, 0.75) 0.45px, transparent 1.2px),
+    radial-gradient(circle at 47% 11%, rgba(255, 255, 255, 0.55) 0.35px, transparent 1px),
+    radial-gradient(circle at 55% 3%, rgba(255, 255, 255, 0.9) 0.5px, transparent 1.5px),
+    radial-gradient(circle at 63% 21%, rgba(224, 242, 254, 0.6) 0.4px, transparent 1.15px),
+    radial-gradient(circle at 71% 8%, rgba(255, 255, 255, 0.8) 0.45px, transparent 1.25px),
+    radial-gradient(circle at 79% 16%, rgba(255, 255, 255, 0.45) 0.35px, transparent 1px),
+    radial-gradient(circle at 88% 5%, rgba(255, 255, 255, 0.88) 0.5px, transparent 1.4px),
+    radial-gradient(circle at 95% 19%, rgba(241, 250, 255, 0.55) 0.4px, transparent 1.1px),
+    radial-gradient(circle at 8% 38%, rgba(255, 255, 255, 0.7) 0.45px, transparent 1.2px),
+    radial-gradient(circle at 17% 52%, rgba(255, 255, 255, 0.5) 0.35px, transparent 1px),
+    radial-gradient(circle at 26% 41%, rgba(224, 242, 254, 0.85) 0.5px, transparent 1.35px),
+    radial-gradient(circle at 35% 58%, rgba(255, 255, 255, 0.4) 0.35px, transparent 1px),
+    radial-gradient(circle at 44% 35%, rgba(255, 255, 255, 0.92) 0.5px, transparent 1.45px),
+    radial-gradient(circle at 52% 49%, rgba(255, 255, 255, 0.6) 0.4px, transparent 1.15px),
+    radial-gradient(circle at 61% 63%, rgba(241, 250, 255, 0.55) 0.35px, transparent 1.05px),
+    radial-gradient(circle at 69% 44%, rgba(255, 255, 255, 0.78) 0.45px, transparent 1.3px),
+    radial-gradient(circle at 77% 56%, rgba(255, 255, 255, 0.48) 0.35px, transparent 1px),
+    radial-gradient(circle at 85% 39%, rgba(224, 242, 254, 0.72) 0.45px, transparent 1.2px),
+    radial-gradient(circle at 93% 54%, rgba(255, 255, 255, 0.65) 0.4px, transparent 1.1px),
+    radial-gradient(circle at 11% 68%, rgba(255, 255, 255, 0.55) 0.35px, transparent 1px),
+    radial-gradient(circle at 19% 81%, rgba(255, 255, 255, 0.88) 0.5px, transparent 1.4px),
+    radial-gradient(circle at 28% 72%, rgba(255, 255, 255, 0.45) 0.35px, transparent 1px),
+    radial-gradient(circle at 36% 89%, rgba(241, 250, 255, 0.68) 0.45px, transparent 1.25px),
+    radial-gradient(circle at 45% 76%, rgba(255, 255, 255, 0.58) 0.4px, transparent 1.1px),
+    radial-gradient(circle at 54% 92%, rgba(255, 255, 255, 0.82) 0.5px, transparent 1.35px),
+    radial-gradient(circle at 62% 71%, rgba(224, 242, 254, 0.52) 0.35px, transparent 1px),
+    radial-gradient(circle at 70% 86%, rgba(255, 255, 255, 0.72) 0.45px, transparent 1.2px),
+    radial-gradient(circle at 78% 78%, rgba(255, 255, 255, 0.42) 0.35px, transparent 1px),
+    radial-gradient(circle at 86% 94%, rgba(255, 255, 255, 0.9) 0.5px, transparent 1.4px),
+    radial-gradient(circle at 94% 69%, rgba(255, 255, 255, 0.62) 0.4px, transparent 1.15px),
+    radial-gradient(circle at 3% 95%, rgba(241, 250, 255, 0.55) 0.4px, transparent 1.1px),
+    radial-gradient(circle at 50% 50%, rgba(186, 230, 253, 0.35) 0.65px, transparent 2px),
+    radial-gradient(circle at 18% 31%, rgba(186, 230, 253, 0.28) 0.55px, transparent 1.6px),
+    radial-gradient(circle at 82% 73%, rgba(186, 230, 253, 0.3) 0.6px, transparent 1.7px);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+.fg-theme-space #fg-panel {
+  position: relative;
+  z-index: 1;
+  max-width: 560px;
+  width: calc(100% - 36px);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 40px 80px rgba(0, 0, 0, 0.65),
+    0 0 100px rgba(56, 189, 248, 0.12);
+  border-color: rgba(125, 211, 252, 0.15);
+}
+
+.fg-theme-space #fg-eyebrow {
+  color: rgba(125, 211, 252, 0.78);
+}
+
+.fg-theme-space #fg-headline {
+  color: #e0f2fe;
+}
+
+.fg-theme-space #fg-subtext {
+  color: rgba(224, 242, 254, 0.55);
+}
+
+.fg-theme-space #fg-timer-label {
+  color: rgba(224, 242, 254, 0.42);
+}
+
+.fg-theme-space #fg-countdown {
+  color: #f0f9ff;
+}
+
+.fg-theme-space #fg-space-astronaut.fg-space-float-tab {
+  position: absolute;
+  right: clamp(10px, 3.5vw, 44px);
+  bottom: clamp(14px, 9vh, 96px);
+  width: min(34vw, 240px);
+  max-height: min(40vh, 270px);
+  height: auto;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  z-index: 0;
+  filter: drop-shadow(0 16px 36px rgba(0, 0, 0, 0.5));
+  animation: fg-space-astronaut-drift 6s ease-in-out infinite;
+}
+
+@keyframes fg-space-astronaut-drift {
+  0%,
+  100% {
+    transform: translate(2px, 0) rotate(-1deg);
+  }
+  50% {
+    transform: translate(10px, -8px) rotate(1.5deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fg-theme-space #fg-space-astronaut.fg-space-float-tab {
+    animation: none;
+  }
+}
+
+/* ── Breath in breath out (premium SVG) ───────────────────────────────────── */
+
+/* Blur only + light saturation tweak */
+#fg-overlay.fg-theme-breath {
+  background: transparent;
+  backdrop-filter: blur(0.7px) saturate(1.02);
+  -webkit-backdrop-filter: blur(0.7px) saturate(1.02);
+}
+
+#fg-overlay.fg-theme-breath #fg-panel {
+  max-width: 440px;
+  width: calc(100% - 40px);
+  padding: 36px 32px 44px;
+  gap: 28px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 0;
+  outline: none;
+  /* Kill base card border + inset ring + outer glow */
+  box-shadow: none;
+}
+
+#fg-overlay.fg-theme-breath #fg-content {
+  gap: 20px;
+}
+
+#fg-overlay.fg-theme-breath #fg-timer-label {
+  color: rgba(147, 197, 253, 0.45);
+}
+
+#fg-overlay.fg-theme-breath #fg-countdown {
+  color: #e0e7ff;
+}
+
+#fg-overlay.fg-theme-breath #fg-skip-btn {
+  border: 0;
+  outline: none;
+  color: rgba(199, 210, 254, 0.92);
+}
+
+#fg-overlay.fg-theme-breath #fg-skip-btn:hover {
+  border: 0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.fg-breath-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.fg-theme-breath #fg-animation-container.fg-breath-wrap {
+  width: 100%;
+  max-width: min(340px, 88vw);
+  height: auto;
+  min-height: 0;
+}
+
+.fg-theme-breath .fg-breath-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
+
+#fg-overlay.fg-theme-breath .fg-breath-svg text {
+  font-family: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+@keyframes fg-breath-levitate {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes fg-breath-ring1 {
+  0%,
+  100% {
+    r: 90;
+    opacity: 0.18;
+  }
+  50% {
+    r: 110;
+    opacity: 0.06;
+  }
+}
+
+@keyframes fg-breath-ring2 {
+  0%,
+  100% {
+    r: 120;
+    opacity: 0.12;
+  }
+  50% {
+    r: 148;
+    opacity: 0.04;
+  }
+}
+
+@keyframes fg-breath-ring3 {
+  0%,
+  100% {
+    r: 152;
+    opacity: 0.07;
+  }
+  50% {
+    r: 188;
+    opacity: 0.02;
+  }
+}
+
+@keyframes fg-breath-core {
+  0%,
+  100% {
+    r: 46;
+  }
+  50% {
+    r: 56;
+  }
+}
+
+@keyframes fg-breath-inner {
+  0%,
+  100% {
+    r: 26;
+    opacity: 0.7;
+  }
+  50% {
+    r: 32;
+    opacity: 0.5;
+  }
+}
+
+@keyframes fg-breath-dot1 {
+  0%,
+  100% {
+    opacity: 0.9;
+    r: 4;
+  }
+  50% {
+    opacity: 0.3;
+    r: 3;
+  }
+}
+
+@keyframes fg-breath-dot2 {
+  0%,
+  100% {
+    opacity: 0.9;
+    r: 4;
+  }
+  50% {
+    opacity: 0.3;
+    r: 3;
+  }
+}
+
+@keyframes fg-breath-dot3 {
+  0%,
+  100% {
+    opacity: 0.9;
+    r: 3;
+  }
+  50% {
+    opacity: 0.3;
+    r: 2.25;
+  }
+}
+
+@keyframes fg-breath-text-in {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes fg-breath-text-out {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+#fg-overlay.fg-theme-breath .fg-breath-group-levitate {
+  animation: fg-breath-levitate 5s ease-in-out infinite;
+  transform-origin: 340px 340px;
+}
+
+#fg-overlay.fg-theme-breath .fg-breath-ring1 {
+  animation: fg-breath-ring1 5s ease-in-out infinite;
+}
+
+#fg-overlay.fg-theme-breath .fg-breath-ring2 {
+  animation: fg-breath-ring2 5s ease-in-out infinite;
+}
+
+#fg-overlay.fg-theme-breath .fg-breath-ring3 {
+  animation: fg-breath-ring3 5s ease-in-out infinite;
+}
+
+#fg-overlay.fg-theme-breath .fg-breath-core {
+  animation: fg-breath-core 5s ease-in-out infinite;
+}
+
+#fg-overlay.fg-theme-breath .fg-breath-inner {
+  animation: fg-breath-inner 5s ease-in-out infinite;
+}
+
+#fg-overlay.fg-theme-breath .fg-breath-d1 {
+  animation: fg-breath-dot1 5s ease-in-out infinite;
+}
+
+#fg-overlay.fg-theme-breath .fg-breath-d2 {
+  animation: fg-breath-dot2 5s ease-in-out infinite;
+  animation-delay: 1.65s;
+}
+
+#fg-overlay.fg-theme-breath .fg-breath-d3 {
+  animation: fg-breath-dot3 5s ease-in-out infinite;
+  animation-delay: 3.3s;
+}
+
+#fg-overlay.fg-theme-breath .fg-breath-t-in {
+  animation: fg-breath-text-in 5s ease-in-out infinite;
+}
+
+#fg-overlay.fg-theme-breath .fg-breath-t-out {
+  animation: fg-breath-text-out 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #fg-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  #fg-overlay.fg-theme-breath .fg-breath-group-levitate,
+  #fg-overlay.fg-theme-breath .fg-breath-ring1,
+  #fg-overlay.fg-theme-breath .fg-breath-ring2,
+  #fg-overlay.fg-theme-breath .fg-breath-ring3,
+  #fg-overlay.fg-theme-breath .fg-breath-core,
+  #fg-overlay.fg-theme-breath .fg-breath-inner,
+  #fg-overlay.fg-theme-breath .fg-breath-d1,
+  #fg-overlay.fg-theme-breath .fg-breath-d2,
+  #fg-overlay.fg-theme-breath .fg-breath-d3,
+  #fg-overlay.fg-theme-breath .fg-breath-t-in,
+  #fg-overlay.fg-theme-breath .fg-breath-t-out {
+    animation: none;
+  }
+}
+
+/* “We're cooked” — same quote layout as Best quotes, warmer accent */
+.fg-theme-cooked #fg-panel {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 40px 80px rgba(0, 0, 0, 0.62),
+    0 0 120px rgba(251, 146, 60, 0.14);
+}
+
+.fg-theme-cooked #fg-content {
+  gap: 14px;
+}
+
+.fg-theme-cooked #fg-quote-card {
+  border-color: rgba(251, 146, 60, 0.38);
+  background: linear-gradient(180deg, rgba(234, 88, 12, 0.1), rgba(234, 88, 12, 0.03));
+}
+
+.fg-theme-cooked #fg-quote-text {
+  color: rgba(255, 247, 237, 0.96);
+}
+
+.fg-theme-cooked #fg-quote-author {
+  color: rgba(253, 186, 116, 0.88);
+}
+
+.fg-theme-cooked #fg-quote-prev {
+  border-color: rgba(253, 186, 116, 0.4);
+  background: rgba(234, 88, 12, 0.12);
+  color: rgba(255, 237, 213, 0.95);
+}
+
+.fg-theme-cooked #fg-quote-prev:hover:not(:disabled) {
+  background: rgba(234, 88, 12, 0.2);
+  border-color: rgba(253, 186, 116, 0.55);
+}
+
+.fg-mycat-wrap,
+.fg-sleepingdog-wrap {
+  width: 100%;
+  max-width: 420px;
+  align-self: center;
+  min-height: 0;
+}
+
+/* My cat — premium placeholder */
+.fg-theme-mycat #fg-panel {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 40px 80px rgba(0, 0, 0, 0.62),
+    0 0 120px rgba(244, 114, 182, 0.12);
+}
+
+.fg-theme-mycat #fg-eyebrow {
+  color: rgba(251, 207, 232, 0.8);
+}
+
+.fg-theme-mycat #fg-headline {
+  color: #fce7f3;
+}
+
+.fg-theme-mycat #fg-content {
+  gap: 16px;
+}
+
+#fg-mycat-slot {
+  min-height: 140px;
+  border-radius: 16px;
+  border: 1px dashed rgba(244, 114, 182, 0.35);
+  background: rgba(244, 114, 182, 0.06);
+}
+
+/* Sleeping dog — premium placeholder */
+.fg-theme-sleepingdog #fg-panel {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 40px 80px rgba(0, 0, 0, 0.62),
+    0 0 120px rgba(167, 139, 250, 0.14);
+}
+
+.fg-theme-sleepingdog #fg-eyebrow {
+  color: rgba(196, 181, 253, 0.85);
+}
+
+.fg-theme-sleepingdog #fg-headline {
+  color: #ede9fe;
+}
+
+.fg-theme-sleepingdog #fg-content {
+  gap: 16px;
+}
+
+#fg-sleepingdog-slot {
+  min-height: 140px;
+  border-radius: 16px;
+  border: 1px dashed rgba(167, 139, 250, 0.4);
+  background: rgba(139, 92, 246, 0.08);
+}
+
+/* Cat stretch: centers pure CSS cat from cat-animation.css */
 .fg-cat-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+}
+
+.fg-theme-cat #fg-animation-container.fg-cat-wrap {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
 }
 
 .fg-quote-wrap {
@@ -161,18 +649,59 @@
   height: auto;
 }
 
-.fg-theme-forest #fg-animation-container.fg-quote-wrap {
+.fg-theme-forest #fg-animation-container.fg-quote-wrap,
+.fg-theme-cooked #fg-animation-container.fg-quote-wrap,
+.fg-theme-night #fg-animation-container.fg-quote-wrap {
   width: 100%;
   max-width: 420px;
   height: auto;
   min-height: 0;
+  align-self: center;
   align-items: stretch;
   justify-content: stretch;
 }
 
+/* Dopamine-detox (night) — quote screen, cool violet */
+.fg-theme-night #fg-panel {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 40px 80px rgba(0, 0, 0, 0.62),
+    0 0 120px rgba(109, 40, 217, 0.12);
+}
+
+.fg-theme-night #fg-content {
+  gap: 14px;
+}
+
+.fg-theme-night #fg-quote-card {
+  border-color: rgba(167, 139, 250, 0.32);
+  background: linear-gradient(180deg, rgba(76, 29, 149, 0.14), rgba(15, 23, 42, 0.38));
+}
+
+.fg-theme-night #fg-quote-text {
+  color: rgba(237, 233, 254, 0.96);
+}
+
+.fg-theme-night #fg-quote-author {
+  color: rgba(196, 181, 253, 0.78);
+}
+
+.fg-theme-night #fg-quote-prev {
+  border-color: rgba(167, 139, 250, 0.38);
+  background: rgba(76, 29, 149, 0.16);
+  color: rgba(237, 233, 254, 0.92);
+}
+
+.fg-theme-night #fg-quote-prev:hover:not(:disabled) {
+  background: rgba(76, 29, 149, 0.26);
+  border-color: rgba(196, 181, 253, 0.48);
+}
+
 #fg-quote-card {
-  margin: 0;
+  margin: 0 auto;
   padding: 18px 20px;
+  width: 100%;
+  max-width: 420px;
   border-radius: 16px;
   border: 1px solid rgba(134, 239, 172, 0.24);
   background: linear-gradient(180deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.02));
@@ -185,6 +714,13 @@
 #fg-quote-card.fg-quote-switching {
   opacity: 0.08;
   transform: translateY(6px);
+}
+
+/* Reset UA quote/figure margins so text stays visually centered */
+#fg-quote-card blockquote,
+#fg-quote-card figcaption {
+  margin: 0;
+  padding: 0;
 }
 
 #fg-quote-text {
@@ -236,35 +772,6 @@
 #fg-quote-prev:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-}
-
-.fg-cat {
-  font-size: 56px;
-  line-height: 1;
-  filter: drop-shadow(0 8px 16px rgba(255, 153, 102, 0.25));
-  animation: fg-cat-bob 2s ease-in-out infinite;
-}
-
-.fg-cat-shadow {
-  width: 56px;
-  height: 10px;
-  margin-top: 8px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.35);
-  filter: blur(2px);
-  animation: fg-cat-shadow 2s ease-in-out infinite;
-}
-
-@keyframes fg-cat-bob {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  25%      { transform: translateY(-4px) rotate(-4deg); }
-  50%      { transform: translateY(-8px) rotate(0deg); }
-  75%      { transform: translateY(-4px) rotate(4deg); }
-}
-
-@keyframes fg-cat-shadow {
-  0%, 100% { transform: scaleX(1); opacity: 0.36; }
-  50%      { transform: scaleX(0.82); opacity: 0.24; }
 }
 
 @keyframes fg-orb-breathe {
@@ -392,8 +899,52 @@
   #fg-countdown {
     font-size: 48px;
   }
+
+  .fg-theme-space #fg-space-astronaut.fg-space-float-tab {
+    width: min(42vw, 200px);
+    max-height: min(32vh, 210px);
+    right: 8px;
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
 }
 
+/* Dopamine detox — GIPHY “nudge” near Skip (pointer-events: none; does not block clicks) */
+#fg-overlay .fg-giphy-reaction {
+  position: fixed;
+  width: 120px;
+  height: auto;
+  max-height: 168px;
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 2147483646;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  transform: scale(0.92);
+  transform-origin: center bottom;
+  transition:
+    opacity 0.22s ease,
+    transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+#fg-overlay .fg-giphy-reaction.fg-giphy-reaction--visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #fg-overlay .fg-giphy-reaction {
+    transition: opacity 0.18s ease;
+    transform: none;
+  }
+
+  #fg-overlay .fg-giphy-reaction.fg-giphy-reaction--visible {
+    transform: none;
+  }
+}
 
 .fg-blocked {
   pointer-events: none !important;

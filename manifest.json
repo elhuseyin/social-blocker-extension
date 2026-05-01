@@ -31,7 +31,7 @@
         "<all_urls>"
       ],
       "js": ["content.js"],
-      "css": ["overlay.css"],
+      "css": ["overlay.css", "cat-animation.css"],
       "run_at": "document_start"
     }
   ],
@@ -55,7 +55,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["overlay.css", "entitlements.js"],
+      "resources": ["overlay.css", "cat-animation.css", "entitlements.js", "assets/astronaut-float.png"],
       "matches": ["<all_urls>"]
     }
   ]

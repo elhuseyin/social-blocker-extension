@@ -420,6 +420,13 @@ body {
   justify-content: space-between;
 }
 
+.field-hint {
+  margin: -4px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 .field-label {
   font-family: var(--font-mono);
   font-size: 10.5px;
@@ -567,6 +574,11 @@ body {
 .domain-builtin {
   background: rgba(17, 24, 39, 0.04);
   color: var(--text-secondary);
+  justify-content: space-between;
+}
+
+.domain-builtin .domain-badge {
+  margin-left: 0;
 }
 
 .domain-custom {
@@ -780,4 +792,174 @@ body {
 
 .btn-subscribe:active {
   transform: scale(0.985);
+}
+
+.btn-compact {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+/* ── Weekly analytics (premium) ───────────────────────────────────────── */
+
+.analytics-card {
+  margin-top: 4px;
+}
+
+.analytics-card-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.analytics-title {
+  margin-bottom: 0;
+}
+
+.analytics-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin: 8px 0 10px;
+}
+
+.analytics-week-toggle {
+  display: flex;
+  width: 100%;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  gap: 2px;
+}
+
+.analytics-seg {
+  flex: 1;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-seg:hover {
+  color: var(--text-secondary);
+}
+
+.analytics-seg--active {
+  background: rgba(167, 139, 250, 0.22);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.25);
+}
+
+.analytics-chart-shell {
+  position: relative;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.04) 0%, rgba(31, 33, 39, 0.92) 40%, rgba(24, 25, 30, 0.98) 100%);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.analytics-chart-inner {
+  position: relative;
+  padding: 8px 8px 4px;
+  min-height: 212px;
+}
+
+/* Locked: show a sharp chart preview (same data shape); block hover/tooltip only */
+.analytics-chart-inner--locked {
+  pointer-events: none;
+  user-select: none;
+}
+
+.weekly-break-chart {
+  display: block;
+  width: 100%;
+  height: 200px;
+  vertical-align: middle;
+}
+
+.analytics-tooltip {
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-primary);
+  background: rgba(23, 24, 28, 0.92);
+  border: 1px solid var(--border);
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 1;
+}
+
+.analytics-tooltip.is-visible {
+  opacity: 1;
+}
+
+.analytics-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.analytics-premium-gate {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: transparent;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.analytics-premium-gate[hidden] {
+  display: none !important;
+}
+
+.analytics-premium-gate__panel {
+  max-width: 240px;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  background: rgba(31, 33, 39, 0.94);
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  text-align: center;
+  pointer-events: auto;
+}
+
+.analytics-premium-gate__title {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
 }

@@ -5,6 +5,7 @@
  */
 
 import { getEntitlements, resolveBreakScreen } from "./entitlements.js";
+import { recordBreakSession } from "./break-session-tracker.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -14,7 +15,8 @@ const DEFAULT_SETTINGS = {
   breakDuration: 0.5,        // minutes the break lasts
   allowSkip: true,          // show "Skip break" button in overlay
   breakScreen: "default",   // selected break overlay theme
-  customDomains: []         // user-added domains
+  customDomains: [],        // user-added domains
+  disabledBuiltIns: []     // built-in hostnames the user turned off (default: all on)
 };
 
 const BUILT_IN_DOMAINS = [
@@ -23,6 +25,11 @@ const BUILT_IN_DOMAINS = [
   "twitter.com",
   "x.com"
 ];
+
+function activeBuiltInDomains(settings) {
+  const disabled = new Set(settings?.disabledBuiltIns || []);
+  return BUILT_IN_DOMAINS.filter((d) => !disabled.has(d));
+}
 
 const TICK_INTERVAL_MS   = 1000;   // how often we update time (1s)
 const TICK_INTERVAL_NAME = "focusguard_keepalive"; // alarm fires every minute just to keep SW alive
@@ -36,6 +43,7 @@ let state = {
   lastTickTime:      Date.now(),   // Date.now() at last tick — initialized so first elapsed is valid
   breakActive:       false,  // is a break currently running?
   breakEndsAt:       null,   // epoch ms when break ends
+  breakStartedAt:    null,   // epoch ms when current break started (analytics)
   settings:          { ...DEFAULT_SETTINGS },
   usage:             {}      // { "instagram.com": totalMs, ... }
 };
@@ -84,7 +92,7 @@ async function injectContentScriptAndStyles(tabId) {
   try {
     await chrome.scripting.insertCSS({
       target: { tabId },
-      files: ["overlay.css"]
+      files: ["overlay.css", "cat-animation.css"]
     });
   } catch (err) {
     logLastError(`injectContentScriptAndStyles insertCSS tab ${tabId}`);
@@ -191,16 +199,17 @@ function extractDomain(url) {
 /** Return true if domain matches one of the blocked domains. */
 function isBlockedDomain(domain) {
   if (!domain) return false;
-  const all = [...BUILT_IN_DOMAINS, ...(state.settings.customDomains || [])];
+  const all = [...activeBuiltInDomains(state.settings), ...(state.settings.customDomains || [])];
   return all.some(blocked => domain === blocked || domain.endsWith("." + blocked));
 }
 
 /** Persist usage and break state to chrome.storage.local. */
 async function persistState() {
   await chrome.storage.local.set({
-    usage:       state.usage,
-    breakActive: state.breakActive,
-    breakEndsAt: state.breakEndsAt
+    usage:          state.usage,
+    breakActive:    state.breakActive,
+    breakEndsAt:    state.breakEndsAt,
+    breakStartedAt: state.breakStartedAt
   });
 }
 
@@ -216,12 +225,23 @@ async function normalizeBreakScreenInState() {
 
 /** Load settings + usage + break state from storage. */
 async function loadState() {
-  const data = await chrome.storage.local.get(["settings", "usage", "breakActive", "breakEndsAt"]);
+  const data = await chrome.storage.local.get([
+    "settings",
+    "usage",
+    "breakActive",
+    "breakEndsAt",
+    "breakStartedAt"
+  ]);
   state.settings    = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
   await normalizeBreakScreenInState();
   state.usage       = data.usage       || {};
   state.breakActive = data.breakActive || false;
   state.breakEndsAt = data.breakEndsAt || null;
+  state.breakStartedAt = data.breakStartedAt ?? null;
+  if (state.breakActive && state.breakEndsAt && state.breakStartedAt == null) {
+    const planned = state.settings.breakDuration * 60 * 1000;
+    state.breakStartedAt = state.breakEndsAt - planned;
+  }
   log("State loaded from storage:", state.usage, "breakActive:", state.breakActive);
 }
 
@@ -255,7 +275,8 @@ function resetAllUsage() {
 async function startBreak() {
   const breakMs     = state.settings.breakDuration * 60 * 1000;
   state.breakActive = true;
-  state.breakEndsAt = Date.now() + breakMs;
+  state.breakStartedAt = Date.now();
+  state.breakEndsAt = state.breakStartedAt + breakMs;
   await persistState();
   log("Break started. Ends at:", new Date(state.breakEndsAt).toISOString());
   const breakScreen = await resolveBreakScreen(state.settings.breakScreen);
@@ -269,15 +290,39 @@ async function startBreak() {
 /** End the break: resets usage, clears state, notifies tabs. */
 async function endBreak(skipped = false) {
   log("Break ended. Skipped:", skipped);
+  const endAt = Date.now();
+  const startAt = state.breakStartedAt;
+  try {
+    if (typeof startAt === "number") {
+      await recordBreakSession({ startAt, endAt, skipped });
+    }
+  } catch (err) {
+    log("recordBreakSession error:", err);
+  }
+
   state.breakActive = false;
   state.breakEndsAt = null;
+  state.breakStartedAt = null;
 
   // Fresh interval: count from 0 toward breakInterval again (all tracked sites).
   resetAllUsage();
   state.lastTickTime = Date.now();
 
   await persistState();
+  await applyPendingBreakScreenIfAny();
   await notifyAllBlockedTabs("END_BREAK", {});
+}
+
+/** After a break ends, promote `breakScreenPending` to `breakScreen` (if any). */
+async function applyPendingBreakScreenIfAny() {
+  const pending = state.settings?.breakScreenPending;
+  if (pending == null || pending === "") return;
+  const resolved = await resolveBreakScreen(pending);
+  const { breakScreenPending: _drop, ...rest } = state.settings;
+  const newSettings = { ...rest, breakScreen: resolved };
+  state.settings = newSettings;
+  await chrome.storage.local.set({ settings: newSettings });
+  log("Applied pending break screen:", resolved);
 }
 
 /** Send a message to the content script of every tab on a blocked domain. */
@@ -439,13 +484,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         state.settings = { ...DEFAULT_SETTINGS, ...message.settings };
         await normalizeBreakScreenInState();
         log("Settings updated:", state.settings);
-        sendResponse({ ok: true });
-        break;
-
-      case "RESET_USAGE":
-        state.usage = {};
-        await persistState();
-        log("All usage reset by user.");
         sendResponse({ ok: true });
         break;
 
