@@ -8,22 +8,20 @@ const COLORS = {
   bar: "rgba(167, 139, 250, 0.85)",
   barHover: "rgba(196, 181, 253, 0.98)",
   axis: "rgba(243, 244, 246, 0.2)",
-  text: "rgba(243, 244, 246, 0.5)",
-  avgLine: "rgba(110, 231, 183, 0.8)"
+  text: "rgba(243, 244, 246, 0.5)"
 };
 
 /**
  * @param {HTMLCanvasElement} canvas
  * @param {Record<string, number>} byDay
- * @param {{ dailyAverage?: number | null, onHoverLabel?: (label: string | null, hours: number | null) => void }} opts
+ * @param {{ onHoverLabel?: (label: string | null, hours: number | null) => void }} opts
  * @returns {() => void} cleanup
  */
 export function renderWeeklyBreakChart(canvas, byDay, opts = {}) {
-  const dailyAverage = opts.dailyAverage != null ? opts.dailyAverage : null;
   const onHoverLabel = typeof opts.onHoverLabel === "function" ? opts.onHoverLabel : () => {};
 
   const values = WEEKDAY_ORDER.map((k) => Math.max(0, byDay[k] || 0));
-  const maxVal = Math.max(0.25, ...values, dailyAverage || 0);
+  const maxVal = Math.max(0.25, ...values);
 
   let hoverDay = null;
   /** @type {{ day: string, x: number, y: number, w: number, h: number, hours: number }[]} */
@@ -72,19 +70,6 @@ export function renderWeeklyBreakChart(canvas, byDay, opts = {}) {
       ctx.lineTo(padL + chartW, y);
       ctx.stroke();
       ctx.fillText(`${hr.toFixed(1)}h`, 2, y + 3);
-    }
-
-    if (dailyAverage != null && dailyAverage > 0) {
-      const ay = yForHours(dailyAverage);
-      ctx.strokeStyle = COLORS.avgLine;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(padL, ay);
-      ctx.lineTo(padL + chartW, ay);
-      ctx.stroke();
-      ctx.fillStyle = COLORS.avgLine;
-      ctx.font = "500 9px DM Sans, sans-serif";
-      ctx.fillText(`Avg ${dailyAverage.toFixed(2)}h/day`, padL, ay - 5);
     }
 
     barRects = [];

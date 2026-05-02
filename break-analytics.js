@@ -57,7 +57,7 @@ export function aggregateSessionsToHoursByWeekday(sessions, weekStart, weekEndEx
 
 /**
  * @param {number} weekOffset
- * @returns {Promise<{ byDay: Record<string, number>, totalHours: number, dailyAverage: number, hasData: boolean, weekStart: number, weekEnd: number }>}
+ * @returns {Promise<{ byDay: Record<string, number>, totalHours: number, hasData: boolean, weekStart: number, weekEnd: number }>}
  */
 export async function getWeeklyBreakSummary(weekOffset = 0) {
   const { start, end } = getWeekBounds(weekOffset);
@@ -66,12 +66,10 @@ export async function getWeeklyBreakSummary(weekOffset = 0) {
   const byDay = aggregateSessionsToHoursByWeekday(sessions, start, end);
   const totalHours = WEEKDAY_ORDER.reduce((acc, d) => acc + (byDay[d] || 0), 0);
   const hasData = totalHours > 0.001;
-  const dailyAverage = hasData ? Math.round((totalHours / 7) * 100) / 100 : 0;
 
   return {
     byDay,
     totalHours: Math.round(totalHours * 100) / 100,
-    dailyAverage,
     hasData,
     weekStart: start,
     weekEnd: end

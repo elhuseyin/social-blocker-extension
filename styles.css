@@ -458,7 +458,7 @@ body {
 }
 
 .select option {
-  background: #ffffff;
+  background: rgba(17, 24, 39, 0.12);
 }
 
 /* Break screen picker */
@@ -912,22 +912,6 @@ body {
 
 .analytics-tooltip.is-visible {
   opacity: 1;
-}
-
-.analytics-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 20px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  pointer-events: none;
-  z-index: 2;
 }
 
 .analytics-premium-gate {

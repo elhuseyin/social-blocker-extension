@@ -62,7 +62,6 @@ const els = {
 
   analyticsCanvas:   $("weekly-break-chart"),
   analyticsTooltip:  $("analytics-chart-tooltip"),
-  analyticsEmpty:    $("analytics-empty"),
   analyticsGate:     $("analytics-premium-gate"),
   analyticsInner:    $("analytics-chart-inner"),
   analyticsWeekThis: $("analytics-week-this"),
@@ -406,16 +405,8 @@ async function refreshWeeklyAnalytics() {
 
   const s = await getWeeklyBreakSummary(analyticsWeekOffset);
   const byDay = s.byDay;
-  const hasData = s.hasData;
-  /** @type {number | null} */
-  const dailyAverage = hasData ? s.dailyAverage : null;
-
-  if (els.analyticsEmpty) {
-    els.analyticsEmpty.hidden = !unlocked || hasData;
-  }
 
   weeklyChartTeardown = renderWeeklyBreakChart(els.analyticsCanvas, byDay, {
-    dailyAverage,
     onHoverLabel: (label) => {
       if (!els.analyticsTooltip) return;
       if (label) {
