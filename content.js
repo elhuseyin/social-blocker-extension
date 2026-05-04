@@ -48,15 +48,13 @@
   let quoteHistory = [];
   let quoteHistoryCursor = -1;
 
-  /** Tear down GIPHY skip proximity (Dopamine detox) before removing overlay. */
+  /** Tear down GIPHY reaction on Skip (Dopamine detox) before removing overlay. */
   let giphySkipProximityTeardown = null;
 
-  // ─── Skip proximity reaction GIF (night / Dopamine detox only) ─────────────
+  // ─── Skip-button hover reaction GIF (night / Dopamine detox only) ───────────
 
   const GIPHY_SKIP_REACTION_GIF_URL =
     "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMDY3bHN2MmF0MDl5ZHIxMnU1czllejVhdXRnajJuNmIwazJvN2xrMyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/7zJZgRRVrKfzo71lnR/giphy.gif";
-
-  const GIPHY_SKIP_PROXIMITY_PX = 120;
 
   let giphySkipGifUrlCache = null;
 
@@ -78,8 +76,8 @@
   }
 
   /**
-   * Mouse near Skip → funny cat GIF (cached URL); stays visible while cursor remains in range.
-   * night theme + skip allowed only.
+   * Pointer on Skip only → funny cat GIF (Dopamine detox / night theme, skip allowed).
+   * Uses Skip button hit-target so moving toward “Previous quote” does not trigger the GIF.
    */
   function setupNightGiphySkipProximity(overlayRoot, allowSkip) {
     teardownGiphySkipProximity();
@@ -98,24 +96,13 @@
 
     void getSkipReactionGifUrlOnce();
 
-    let hoverNear = false;
+    let pointerOnSkip = false;
     let offsetJX = 0;
     let offsetJY = 0;
-    let lastPointer = { x: 0, y: 0 };
-    let rafPending = false;
-
-    function dist(ax, ay, bx, by) {
-      return Math.hypot(ax - bx, ay - by);
-    }
 
     function skipCenter() {
       const r = skipBtn.getBoundingClientRect();
       return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
-    }
-
-    function stillNear() {
-      const { cx, cy } = skipCenter();
-      return dist(lastPointer.x, lastPointer.y, cx, cy) < GIPHY_SKIP_PROXIMITY_PX;
     }
 
     function applyPosition() {
@@ -127,11 +114,11 @@
     function showGifNearSkip() {
       getSkipReactionGifUrlOnce().then((gifUrl) => {
         if (!gifUrl || !overlayEl || !img.isConnected) return;
-        if (!stillNear()) return;
+        if (!pointerOnSkip) return;
         applyPosition();
         const reveal = () => {
           requestAnimationFrame(() => {
-            if (img.isConnected && stillNear()) img.classList.add("fg-giphy-reaction--visible");
+            if (img.isConnected && pointerOnSkip) img.classList.add("fg-giphy-reaction--visible");
           });
         };
 
@@ -145,36 +132,31 @@
       });
     }
 
-    function onMove(e) {
-      if (rafPending) return;
-      rafPending = true;
-      requestAnimationFrame(() => {
-        rafPending = false;
-        if (!overlayEl || !skipBtn.isConnected) return;
-        lastPointer.x = e.clientX;
-        lastPointer.y = e.clientY;
-        const { cx, cy } = skipCenter();
-        const near = dist(e.clientX, e.clientY, cx, cy) < GIPHY_SKIP_PROXIMITY_PX;
-        if (near) {
-          const entering = !hoverNear;
-          hoverNear = true;
-          if (entering) {
-            offsetJX = (Math.random() - 0.5) * 28;
-            offsetJY = (Math.random() - 0.5) * 20;
-            showGifNearSkip();
-          }
-          applyPosition();
-        } else {
-          hoverNear = false;
-          img.classList.remove("fg-giphy-reaction--visible");
-        }
-      });
+    function onSkipEnter() {
+      pointerOnSkip = true;
+      offsetJX = (Math.random() - 0.5) * 28;
+      offsetJY = (Math.random() - 0.5) * 20;
+      showGifNearSkip();
     }
 
-    overlayRoot.addEventListener("mousemove", onMove, { passive: true });
+    function onSkipLeave() {
+      pointerOnSkip = false;
+      img.classList.remove("fg-giphy-reaction--visible");
+    }
+
+    function onSkipMove() {
+      if (!pointerOnSkip) return;
+      applyPosition();
+    }
+
+    skipBtn.addEventListener("mouseenter", onSkipEnter);
+    skipBtn.addEventListener("mouseleave", onSkipLeave);
+    skipBtn.addEventListener("mousemove", onSkipMove, { passive: true });
 
     giphySkipProximityTeardown = () => {
-      overlayRoot.removeEventListener("mousemove", onMove);
+      skipBtn.removeEventListener("mouseenter", onSkipEnter);
+      skipBtn.removeEventListener("mouseleave", onSkipLeave);
+      skipBtn.removeEventListener("mousemove", onSkipMove);
       img.onload = null;
       img.onerror = null;
       img.remove();

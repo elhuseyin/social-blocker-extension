@@ -521,6 +521,97 @@ body {
 
 .theme-thumb--locked {
   background: rgba(17, 24, 39, 0.08);
+  padding: 0;
+  overflow: visible;
+}
+
+/* Premium theme rows — CSS padlock (gold), replaces emoji lock */
+.fg-premium-lock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  height: 100%;
+  padding-bottom: 2px;
+  box-sizing: border-box;
+  --lock-gold: #b8860b;
+  --lock-gold-mid: #d4a017;
+  --lock-gold-light: #f0c850;
+  --lock-keyhole: #121316;
+}
+
+.fg-premium-lock__shackle {
+  width: 11px;
+  height: 9px;
+  border: 2px solid var(--lock-gold-mid);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  box-sizing: border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 0 1px rgba(184, 134, 11, 0.35);
+}
+
+.fg-premium-lock__body {
+  width: 22px;
+  height: 15px;
+  margin-top: -1px;
+  background: linear-gradient(
+    165deg,
+    var(--lock-gold-light) 0%,
+    var(--lock-gold-mid) 42%,
+    var(--lock-gold) 100%
+  );
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 1px 3px rgba(0, 0, 0, 0.28);
+}
+
+.fg-premium-lock__keyhole {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fg-premium-lock__keyhole-circle {
+  width: 4px;
+  height: 4px;
+  background: var(--lock-keyhole);
+  border-radius: 50%;
+}
+
+.fg-premium-lock__keyhole-slot {
+  width: 2px;
+  height: 3px;
+  background: var(--lock-keyhole);
+  border-radius: 0 0 1px 1px;
+  margin-top: -1px;
+}
+
+/* Premium unlocked — break screen thumb shows logo image (see PREMIUM_THEME_LOGO_PATH in popup.js) */
+.theme-thumb--premium-logo {
+  background: #0c0c0f;
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  padding: 0;
+  overflow: hidden;
+}
+
+.theme-thumb--premium-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  border-radius: 9px;
+}
+
+.theme-thumb--premium-logo-placeholder {
+  background: radial-gradient(circle at 40% 35%, rgba(167, 139, 250, 0.35), rgba(91, 33, 182, 0.25));
+  border: 1px solid rgba(167, 139, 250, 0.28);
 }
 
 .theme-meta {
@@ -792,6 +883,82 @@ body {
 
 .btn-subscribe:active {
   transform: scale(0.985);
+}
+
+.billing-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.btn-billing-secondary {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(167, 139, 250, 0.12);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-billing-secondary:hover {
+  background: rgba(167, 139, 250, 0.2);
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
+.billing-hint {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-align: center;
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.promo-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.promo-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.btn-billing-refresh {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.btn-billing-refresh:hover {
+  color: var(--accent);
+}
+
+.subscribe-copy--premium {
+  font-size: 14px;
+  color: var(--success);
+  margin-bottom: 6px;
 }
 
 .btn-compact {

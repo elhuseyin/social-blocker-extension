@@ -1,8 +1,8 @@
 /**
- * Lightweight canvas bar chart for weekly hours (no external deps).
+ * Lightweight canvas bar chart for weekly hours on social (no external deps).
  */
 
-import { WEEKDAY_ORDER } from "./break-analytics.js";
+import { WEEKDAY_ORDER } from "./usage-analytics.js";
 
 const COLORS = {
   bar: "rgba(167, 139, 250, 0.85)",
@@ -17,7 +17,7 @@ const COLORS = {
  * @param {{ onHoverLabel?: (label: string | null, hours: number | null) => void }} opts
  * @returns {() => void} cleanup
  */
-export function renderWeeklyBreakChart(canvas, byDay, opts = {}) {
+export function renderWeeklyUsageChart(canvas, byDay, opts = {}) {
   const onHoverLabel = typeof opts.onHoverLabel === "function" ? opts.onHoverLabel : () => {};
 
   const values = WEEKDAY_ORDER.map((k) => Math.max(0, byDay[k] || 0));

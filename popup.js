@@ -5,11 +5,16 @@
  */
 
 import { getEntitlements, resolveBreakScreen } from "./entitlements.js";
-import { getWeeklyBreakSummary } from "./break-analytics.js";
-import { renderWeeklyBreakChart } from "./weekly-analytics-chart.js";
+import { getWeeklyUsageSummary } from "./usage-analytics.js";
+import { renderWeeklyUsageChart } from "./weekly-analytics-chart.js";
+import {
+  ensureExtensionUserId,
+  syncPremiumFromServer,
+  createCheckoutSession,
+  redeemPromoCode
+} from "./billing-api.js";
 
 const LOG_PREFIX = "[FocusGuard Popup]";
-const SUBSCRIPTION_URL = "https://your-subscription-page.example.com";
 
 const DEFAULT_SETTINGS = {
   enabled:       true,
@@ -27,6 +32,23 @@ const BUILTIN_PRESETS = [
   { id: "facebook", label: "facebook.com", icon: "👥", domains: ["facebook.com"] },
   { id: "twitter", label: "x.com / twitter.com", icon: "𝕏", domains: ["twitter.com", "x.com"] }
 ];
+
+/** Popup thumb image per premium `data-theme` (paths under extension root). Add entries as logos ship. */
+const PREMIUM_THEME_LOGO_PATH = {
+  forest: "assets/reset-mind-logo.png",
+  space: "assets/astronaut-float.png"
+};
+
+const PREMIUM_LOCK_THUMB_HTML = `
+<span class="fg-premium-lock">
+  <span class="fg-premium-lock__shackle"></span>
+  <span class="fg-premium-lock__body">
+    <span class="fg-premium-lock__keyhole">
+      <span class="fg-premium-lock__keyhole-circle"></span>
+      <span class="fg-premium-lock__keyhole-slot"></span>
+    </span>
+  </span>
+</span>`.trim();
 
 // ─── Element refs ────────────────────────────────────────────────────────
 
@@ -54,7 +76,14 @@ const els = {
   addDomainBtn:      $("add-domain-btn"),
   domainError:       $("domain-error"),
   breakThemeList:    $("break-theme-list"),
-  subscribeBtn:      $("subscribe-btn"),
+  billingSectionNotPremium: $("billing-section-not-premium"),
+  billingSectionPremium:    $("billing-section-premium"),
+  subscribeMonthlyBtn:      $("subscribe-monthly-btn"),
+  subscribeLifetimeBtn:     $("subscribe-lifetime-btn"),
+  promoInput:               $("promo-input"),
+  promoRedeemBtn:           $("promo-redeem-btn"),
+  refreshPremiumBtn:        $("refresh-premium-btn"),
+  refreshPremiumBtnPremium: $("refresh-premium-btn-premium"),
   devModeBadge:      $("dev-mode-badge"),
 
   saveBtn:           $("save-btn"),
@@ -188,6 +217,33 @@ function isPremiumUnlocked() {
   return entitlementsCache.isSubscribed;
 }
 
+/** Gold lock vs theme logo in each premium break row thumb. */
+function renderPremiumBreakThumbs() {
+  if (!els.breakThemeList) return;
+  els.breakThemeList.querySelectorAll(".theme-item[data-locked] .theme-thumb").forEach((thumb) => {
+    const row = thumb.closest(".theme-item");
+    const theme = row?.dataset.theme;
+    if (!theme) return;
+
+    if (!isPremiumUnlocked()) {
+      thumb.className = "theme-thumb theme-thumb--locked";
+      thumb.innerHTML = PREMIUM_LOCK_THUMB_HTML;
+      return;
+    }
+
+    const logoPath = PREMIUM_THEME_LOGO_PATH[theme];
+    if (logoPath) {
+      thumb.className = "theme-thumb theme-thumb--premium-logo";
+      const src = chrome.runtime.getURL(logoPath);
+      thumb.innerHTML =
+        `<img src="${src}" alt="" role="presentation" decoding="async" loading="lazy" />`;
+    } else {
+      thumb.className = "theme-thumb theme-thumb--premium-logo theme-thumb--premium-logo-placeholder";
+      thumb.innerHTML = "";
+    }
+  });
+}
+
 function applyPremiumThemeState() {
   const options = els.breakThemeList?.querySelectorAll(".theme-item[data-locked]") || [];
   options.forEach((btn) => {
@@ -198,6 +254,7 @@ function applyPremiumThemeState() {
     if (subEl) subEl.textContent = entitlementsCache.devMode ? "Premium (Dev)" : "Premium";
     btn.setAttribute("aria-disabled", isPremiumUnlocked() ? "false" : "true");
   });
+  renderPremiumBreakThumbs();
 }
 
 function renderDevModeBadge() {
@@ -205,11 +262,31 @@ function renderDevModeBadge() {
   els.devModeBadge.hidden = !entitlementsCache.devMode;
 }
 
-async function refreshEntitlementsUI() {
+function updateBillingFooterVisibility() {
+  const premium = isPremiumUnlocked();
+  if (els.billingSectionNotPremium) {
+    els.billingSectionNotPremium.hidden = premium;
+  }
+  if (els.billingSectionPremium) {
+    els.billingSectionPremium.hidden = !premium;
+  }
+}
+
+async function refreshEntitlementsUI(options = {}) {
+  if (!options.skipBillingSync) {
+    try {
+      await ensureExtensionUserId();
+      await syncPremiumFromServer();
+    } catch (err) {
+      log("Billing sync failed (offline or misconfigured API):", err?.message || err);
+    }
+  }
+
   const { isSubscribed, devMode } = await getEntitlements();
   entitlementsCache = { isSubscribed, devMode };
   applyPremiumThemeState();
   renderDevModeBadge();
+  updateBillingFooterVisibility();
   breakScreenDraft = await resolveBreakScreen(
     currentSettings.breakScreenPending ?? currentSettings.breakScreen
   );
@@ -231,7 +308,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.devMode || changes.subscribed || changes.dev_mode || changes.settings) {
     void refreshEntitlementsUI();
   }
-  if (changes.breakSessionLog && isPremiumUnlocked()) {
+  if (changes.socialUsageDaily && isPremiumUnlocked()) {
     void refreshWeeklyAnalytics();
   }
 });
@@ -403,10 +480,10 @@ async function refreshWeeklyAnalytics() {
     weeklyChartTeardown = null;
   }
 
-  const s = await getWeeklyBreakSummary(analyticsWeekOffset);
+  const s = await getWeeklyUsageSummary(analyticsWeekOffset);
   const byDay = s.byDay;
 
-  weeklyChartTeardown = renderWeeklyBreakChart(els.analyticsCanvas, byDay, {
+  weeklyChartTeardown = renderWeeklyUsageChart(els.analyticsCanvas, byDay, {
     onHoverLabel: (label) => {
       if (!els.analyticsTooltip) return;
       if (label) {
@@ -529,26 +606,96 @@ if (els.breakThemeList) {
   });
 }
 
-if (els.subscribeBtn) {
-  els.subscribeBtn.addEventListener("click", async () => {
-    try {
-      await chrome.tabs.create({ url: SUBSCRIPTION_URL });
-    } catch (err) {
-      log("Failed to open subscription page:", err);
-      showSaveStatus("Could not open subscription page", true);
+async function openStripeCheckout(mode) {
+  showSaveStatus("Opening checkout…");
+  const { url, error } = await createCheckoutSession(mode);
+  if (error || !url) {
+    const msg =
+      error === "network"
+        ? "Could not reach billing server."
+        : error === "price_not_configured"
+          ? "Server missing Stripe price IDs."
+          : "Could not start checkout.";
+    showSaveStatus(msg, true);
+    return;
+  }
+  try {
+    await chrome.tabs.create({ url });
+    showSaveStatus("Complete payment in the new tab, then refresh status.");
+  } catch (err) {
+    log("Failed to open checkout:", err);
+    showSaveStatus("Could not open browser tab.", true);
+  }
+}
+
+if (els.subscribeMonthlyBtn) {
+  els.subscribeMonthlyBtn.addEventListener("click", () => void openStripeCheckout("subscription"));
+}
+if (els.subscribeLifetimeBtn) {
+  els.subscribeLifetimeBtn.addEventListener("click", () => void openStripeCheckout("payment"));
+}
+
+if (els.promoRedeemBtn && els.promoInput) {
+  els.promoRedeemBtn.addEventListener("click", async () => {
+    const code = els.promoInput.value.trim();
+    if (!code) {
+      showSaveStatus("Enter a code.", true);
+      return;
     }
+    const result = await redeemPromoCode(code);
+    if (result.error) {
+      const msg =
+        result.error === "network"
+          ? "Could not reach billing server."
+          : result.error === "invalid_code"
+            ? "Invalid code."
+            : result.error === "expired"
+              ? "Code expired."
+              : result.error === "exhausted"
+                ? "Code fully redeemed."
+                : result.error === "already_redeemed"
+                  ? "You already used this code."
+                  : "Could not redeem code.";
+      showSaveStatus(msg, true);
+      return;
+    }
+    els.promoInput.value = "";
+    showSaveStatus("Premium unlocked.");
+    await refreshEntitlementsUI();
+  });
+}
+
+async function manualRefreshPremium() {
+  showSaveStatus("Syncing…");
+  const r = await syncPremiumFromServer();
+  if (r.skipped) {
+    await refreshEntitlementsUI({ skipBillingSync: true });
+    showSaveStatus("Premium (dev mode).");
+    return;
+  }
+  if (r.error === "network" || (r.error && String(r.error).startsWith("http_"))) {
+    showSaveStatus("Could not reach billing server.", true);
+    return;
+  }
+  await refreshEntitlementsUI({ skipBillingSync: true });
+  showSaveStatus(isPremiumUnlocked() ? "Premium active." : "No active subscription found.");
+}
+
+if (els.refreshPremiumBtn) {
+  els.refreshPremiumBtn.addEventListener("click", () => void manualRefreshPremium());
+}
+if (els.refreshPremiumBtnPremium) {
+  els.refreshPremiumBtnPremium.addEventListener("click", () => void manualRefreshPremium());
+}
+
+if (els.promoInput) {
+  els.promoInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && els.promoRedeemBtn) els.promoRedeemBtn.click();
   });
 }
 
 if (els.analyticsUpgrade) {
-  els.analyticsUpgrade.addEventListener("click", async () => {
-    try {
-      await chrome.tabs.create({ url: SUBSCRIPTION_URL });
-    } catch (err) {
-      log("Failed to open subscription page:", err);
-      showSaveStatus("Could not open subscription page", true);
-    }
-  });
+  els.analyticsUpgrade.addEventListener("click", () => void openStripeCheckout("subscription"));
 }
 
 if (els.analyticsWeekThis && els.analyticsWeekLast) {

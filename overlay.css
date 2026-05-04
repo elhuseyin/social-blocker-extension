@@ -529,7 +529,7 @@
   }
 }
 
-/* “We're cooked” — same quote layout as Best quotes, warmer accent */
+/* “We're cooked” — same quote layout as Reset mind (forest), warmer accent */
 .fg-theme-cooked #fg-panel {
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.04) inset,
@@ -907,7 +907,7 @@
   }
 }
 
-/* Dopamine detox — GIPHY “nudge” near Skip (pointer-events: none; does not block clicks) */
+/* Dopamine detox — GIPHY on Skip hover only (pointer-events: none; does not block clicks) */
 #fg-overlay .fg-giphy-reaction {
   position: fixed;
   width: 120px;

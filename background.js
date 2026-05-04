@@ -5,7 +5,7 @@
  */
 
 import { getEntitlements, resolveBreakScreen } from "./entitlements.js";
-import { recordBreakSession } from "./break-session-tracker.js";
+import { addSocialUsageMsForSpan } from "./social-usage-daily-tracker.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -45,7 +45,10 @@ let state = {
   breakEndsAt:       null,   // epoch ms when break ends
   breakStartedAt:    null,   // epoch ms when current break started (analytics)
   settings:          { ...DEFAULT_SETTINGS },
-  usage:             {}      // { "instagram.com": totalMs, ... }
+  usage:             {},     // { "instagram.com": totalMs, ... }
+  /** In-memory only: daily social analytics persist on session end, not each tick. */
+  socialSessionDomain:   null,
+  socialSessionStartedAt: null
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -269,10 +272,38 @@ function resetAllUsage() {
   log("All usage reset (post-break).");
 }
 
+/** Write accumulated social time for the current focus session to storage (split across local days). */
+async function flushSocialSession(endTs = Date.now()) {
+  const domain = state.socialSessionDomain;
+  const started = state.socialSessionStartedAt;
+  if (!domain || started == null) return;
+  if (endTs <= started) {
+    state.socialSessionDomain = null;
+    state.socialSessionStartedAt = null;
+    return;
+  }
+  try {
+    await addSocialUsageMsForSpan(domain, started, endTs);
+  } catch (err) {
+    log("flushSocialSession error:", err);
+  } finally {
+    state.socialSessionDomain = null;
+    state.socialSessionStartedAt = null;
+  }
+}
+
+/** Start tracking a social session when focus is on a blocked domain (caller ensures break/disabled rules). */
+function startSocialSession(domain, startTs = Date.now()) {
+  if (!domain) return;
+  state.socialSessionDomain = domain;
+  state.socialSessionStartedAt = startTs;
+}
+
 // ─── Break Management ─────────────────────────────────────────────────────────
 
 /** Start a break: sets state, persists, and notifies all relevant tabs. */
 async function startBreak() {
+  await flushSocialSession(Date.now());
   const breakMs     = state.settings.breakDuration * 60 * 1000;
   state.breakActive = true;
   state.breakStartedAt = Date.now();
@@ -290,15 +321,6 @@ async function startBreak() {
 /** End the break: resets usage, clears state, notifies tabs. */
 async function endBreak(skipped = false) {
   log("Break ended. Skipped:", skipped);
-  const endAt = Date.now();
-  const startAt = state.breakStartedAt;
-  try {
-    if (typeof startAt === "number") {
-      await recordBreakSession({ startAt, endAt, skipped });
-    }
-  } catch (err) {
-    log("recordBreakSession error:", err);
-  }
 
   state.breakActive = false;
   state.breakEndsAt = null;
@@ -311,6 +333,10 @@ async function endBreak(skipped = false) {
   await persistState();
   await applyPendingBreakScreenIfAny();
   await notifyAllBlockedTabs("END_BREAK", {});
+
+  if (state.settings.enabled && state.activeTabDomain) {
+    startSocialSession(state.activeTabDomain, Date.now());
+  }
 }
 
 /** After a break ends, promote `breakScreenPending` to `breakScreen` (if any). */
@@ -350,9 +376,12 @@ async function notifyTab(tabId, type, payload) {
 // ─── Tick Logic (runs every TICK_INTERVAL_MS via alarm) ──────────────────────
 
 async function onTick() {
-  if (!state.settings.enabled) return;
-
   const now = Date.now();
+
+  if (!state.settings.enabled) {
+    if (state.socialSessionStartedAt != null) await flushSocialSession(now);
+    return;
+  }
 
   // ── Handle active break countdown ──────────────────────────────────────────
   if (state.breakActive) {
@@ -376,7 +405,8 @@ async function onTick() {
 
   // ── Accumulate usage for active blocked tab ────────────────────────────────
   if (state.activeTabId !== null && state.activeTabDomain && state.lastTickTime) {
-    const elapsed = now - state.lastTickTime;
+    const tickStart = state.lastTickTime;
+    const elapsed = now - tickStart;
     addUsageMs(state.activeTabDomain, elapsed);
     await persistState();
 
@@ -400,12 +430,27 @@ async function handleTabChange(tabId, url) {
   const domain = extractDomain(url);
   const newBlockedDomain = isBlockedDomain(domain) ? domain : null;
 
+  const prevTabId = state.activeTabId;
+  const t = Date.now();
+  const hadSocialSession =
+    state.socialSessionStartedAt != null && state.socialSessionDomain != null;
+  if (
+    hadSocialSession &&
+    (tabId !== prevTabId || newBlockedDomain !== state.socialSessionDomain)
+  ) {
+    await flushSocialSession(t);
+  }
+
   state.activeTabId     = tabId;
   state.activeTabDomain = newBlockedDomain;
   // Reset the tick baseline so we don't count time spent in other tabs
-  state.lastTickTime    = Date.now();
+  state.lastTickTime    = t;
 
   log("Active tab changed:", domain, "| blocked:", !!state.activeTabDomain);
+
+  if (state.settings.enabled && !state.breakActive && newBlockedDomain && state.socialSessionStartedAt == null) {
+    startSocialSession(newBlockedDomain, t);
+  }
 
   // If a break is already active and the user navigated to a blocked site, re-trigger overlay
   if (state.breakActive && state.activeTabDomain) {
@@ -439,9 +484,20 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   await handleTabChange(tabId, tab.url || "");
 });
 
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabId !== state.activeTabId) return;
+  void (async () => {
+    await flushSocialSession(Date.now());
+    state.activeTabId = null;
+    state.activeTabDomain = null;
+    state.lastTickTime = null;
+  })();
+});
+
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
   if (windowId === chrome.windows.WINDOW_ID_NONE) {
     // User switched to another app — stop counting
+    await flushSocialSession(Date.now());
     state.activeTabId    = null;
     state.activeTabDomain = null;
     state.lastTickTime   = null;
@@ -483,6 +539,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "SETTINGS_UPDATED":
         state.settings = { ...DEFAULT_SETTINGS, ...message.settings };
         await normalizeBreakScreenInState();
+        if (!state.settings.enabled) {
+          await flushSocialSession(Date.now());
+        } else if (
+          state.settings.enabled &&
+          !state.breakActive &&
+          state.activeTabDomain &&
+          state.socialSessionStartedAt == null
+        ) {
+          startSocialSession(state.activeTabDomain, Date.now());
+        }
         log("Settings updated:", state.settings);
         sendResponse({ ok: true });
         break;
@@ -501,6 +567,16 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.settings) {
     state.settings = { ...DEFAULT_SETTINGS, ...changes.settings.newValue };
     log("Settings synced from storage:", state.settings);
+    if (!state.settings.enabled) {
+      void flushSocialSession(Date.now());
+    } else if (
+      state.settings.enabled &&
+      !state.breakActive &&
+      state.activeTabDomain &&
+      state.socialSessionStartedAt == null
+    ) {
+      startSocialSession(state.activeTabDomain, Date.now());
+    }
   }
   if (changes.settings || changes.devMode || changes.subscribed || changes.dev_mode) {
     void normalizeBreakScreenInState();
@@ -575,6 +651,12 @@ async function init() {
   }
 
   log("Init complete.");
+}
+
+if (chrome.runtime.onSuspend) {
+  chrome.runtime.onSuspend.addListener(() => {
+    void flushSocialSession(Date.now());
+  });
 }
 
 init();
