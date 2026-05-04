@@ -1,0 +1,140 @@
+/**
+ * Pure CSS cat — only applies inside #fg-overlay (break UI).
+ * Transform-based animations; transparent backgrounds. Respects prefers-reduced-motion.
+ * Swap animations or add premium variants by scoping new classes under #fg-overlay.
+ */
+
+#fg-overlay .cat-container {
+  position: relative;
+  width: 120px;
+  height: 100px;
+  margin: 0 auto;
+  background: transparent;
+  contain: layout style;
+}
+
+#fg-overlay .cat-container .cat {
+  position: relative;
+  width: 120px;
+  height: 100px;
+}
+
+#fg-overlay .cat-container .body {
+  position: absolute;
+  bottom: 0;
+  z-index: 0;
+  width: 120px;
+  height: 70px;
+  background: #fefcf8;
+  border-radius: 50px 50px 30px 30px;
+  box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.04);
+  transform-origin: center bottom;
+  animation: fg-cat-anim-breathe 2.2s ease-in-out infinite;
+}
+
+/* Ears: closer together, bases overlap the rounded body so they read as one shape */
+#fg-overlay .cat-container .ear {
+  position: absolute;
+  z-index: 1;
+  width: 24px;
+  height: 28px;
+  bottom: 60px;
+  background: #fefcf8;
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  transform-origin: 50% 100%;
+}
+
+#fg-overlay .cat-container .ear.left {
+  left: 30px;
+  transform: rotate(-11deg);
+}
+
+#fg-overlay .cat-container .ear.right {
+  right: 30px;
+  transform: rotate(11deg);
+}
+
+#fg-overlay .cat-container .eye {
+  position: absolute;
+  top: 30px;
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  background: #1c1917;
+  border-radius: 50%;
+  transform-origin: center center;
+  animation: fg-cat-anim-blink 5s ease-in-out infinite;
+}
+
+#fg-overlay .cat-container .eye.left {
+  left: 35px;
+}
+
+#fg-overlay .cat-container .eye.right {
+  right: 35px;
+}
+
+#fg-overlay .cat-container .nose {
+  position: absolute;
+  top: 50px;
+  z-index: 2;
+  left: 50%;
+  width: 8px;
+  height: 6px;
+  background: #f9a8d4;
+  transform: translateX(-50%);
+  border-radius: 50%;
+}
+
+#fg-overlay .cat-container .tail {
+  position: absolute;
+  right: -25px;
+  bottom: 10px;
+  z-index: 0;
+  width: 50px;
+  height: 10px;
+  background: #fefcf8;
+  border-radius: 10px;
+  transform-origin: left center;
+  animation: fg-cat-anim-wag 2.8s ease-in-out infinite;
+}
+
+@keyframes fg-cat-anim-breathe {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(1.04);
+  }
+}
+
+@keyframes fg-cat-anim-wag {
+  0%,
+  100% {
+    transform: rotate(8deg);
+  }
+  50% {
+    transform: rotate(-14deg);
+  }
+}
+
+@keyframes fg-cat-anim-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  94%,
+  96% {
+    transform: scaleY(0.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #fg-overlay .cat-container .body,
+  #fg-overlay .cat-container .tail,
+  #fg-overlay .cat-container .eye {
+    animation: none;
+  }
+}

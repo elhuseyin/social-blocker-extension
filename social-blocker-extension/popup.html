@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Focus Guard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <div class="popup-scroll">
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <header class="popup-header">
+    <div class="header-left">
+      <div class="logo-orb"></div>
+      <div class="header-text">
+        <span class="app-name">Focus Guard</span>
+        <span class="app-tagline">Mindful Scrolling</span>
+        <span class="dev-mode-badge" id="dev-mode-badge" hidden>DEV MODE</span>
+      </div>
+    </div>
+
+    <!-- Master toggle -->
+    <label class="toggle-switch" aria-label="Enable Focus Guard">
+      <input type="checkbox" id="toggle-enabled" />
+      <span class="toggle-track">
+        <span class="toggle-thumb"></span>
+      </span>
+    </label>
+  </header>
+
+  <!-- ── Status bar ───────────────────────────────────────────────────────── -->
+  <div class="status-bar" id="status-bar">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text">Loading…</span>
+  </div>
+
+  <!-- ── Scrollable content ───────────────────────────────────────────────── -->
+  <main class="popup-main">
+
+    <!-- Current domain usage card -->
+    <section class="card" id="usage-card">
+      <div class="card-label">Current site</div>
+      <div class="usage-row">
+        <span id="usage-domain" class="usage-domain">—</span>
+        <span id="usage-time" class="usage-time">0:00</span>
+      </div>
+      <div class="usage-bar-track" aria-hidden="true">
+        <div class="usage-bar-fill" id="usage-bar-fill"></div>
+      </div>
+      <div class="usage-bar-legend" id="usage-bar-legend">— / —</div>
+    </section>
+
+    <section class="card">
+      <div class="card-label">Time by site</div>
+      <ul class="site-usage-list" id="site-usage-list" aria-label="Time spent per site">
+        <li class="site-usage-empty">Visit tracked sites to start tracking.</li>
+      </ul>
+    </section>
+
+    <!-- Settings -->
+    <section class="card settings-card">
+      <div class="card-label">Settings</div>
+
+      <div class="field-group">
+        <label class="field-label" for="break-interval">Break every</label>
+        <select id="break-interval" class="select">
+          <option value="30">30 minutes</option>
+          <option value="60">1 hour</option>
+          <option value="120">2 hours</option>
+        </select>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="break-duration">Break lasts</label>
+        <select id="break-duration" class="select">
+          <option value="5">5 minutes</option>
+          <option value="10">10 minutes</option>
+          <option value="15">15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60">1 hour</option>
+        </select>
+      </div>
+
+      <div class="field-group field-row">
+        <label class="field-label" for="toggle-skip">Allow "Skip break"</label>
+        <label class="toggle-switch toggle-small" aria-label="Allow skip break">
+          <input type="checkbox" id="toggle-skip" />
+          <span class="toggle-track">
+            <span class="toggle-thumb"></span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-label">Break screens</div>
+      <div class="theme-list" id="break-theme-list" aria-label="Break screen selection">
+        <button class="theme-item" type="button" data-theme="default">
+          <span class="theme-thumb theme-thumb--default" aria-hidden="true"></span>
+          <span class="theme-meta">
+            <span class="theme-title">Default calm screen</span>
+            <span class="theme-subtitle">Free</span>
+          </span>
+          <span class="theme-state">Selected</span>
+        </button>
+
+        <button class="theme-item" type="button" data-theme="cat">
+          <span class="theme-thumb theme-thumb--cat" aria-hidden="true">🐱</span>
+          <span class="theme-meta">
+            <span class="theme-title">Cat stretch animation</span>
+            <span class="theme-subtitle">Free</span>
+          </span>
+          <span class="theme-state">Select</span>
+        </button>
+
+        <button class="theme-item theme-item--locked" type="button" data-theme="forest" data-locked="true">
+          <span class="theme-thumb theme-thumb--locked" aria-hidden="true">
+            <span class="fg-premium-lock">
+              <span class="fg-premium-lock__shackle"></span>
+              <span class="fg-premium-lock__body">
+                <span class="fg-premium-lock__keyhole">
+                  <span class="fg-premium-lock__keyhole-circle"></span>
+                  <span class="fg-premium-lock__keyhole-slot"></span>
+                </span>
+              </span>
+            </span>
+          </span>
+          <span class="theme-meta">
+            <span class="theme-title">Reset mind</span>
+            <span class="theme-subtitle">Premium</span>
+          </span>
+          <span class="theme-state">Locked</span>
+        </button>
+
+        <button class="theme-item theme-item--locked" type="button" data-theme="night" data-locked="true">
+          <span class="theme-thumb theme-thumb--locked" aria-hidden="true">
+            <span class="fg-premium-lock">
+              <span class="fg-premium-lock__shackle"></span>
+              <span class="fg-premium-lock__body">
+                <span class="fg-premium-lock__keyhole">
+                  <span class="fg-premium-lock__keyhole-circle"></span>
+                  <span class="fg-premium-lock__keyhole-slot"></span>
+                </span>
+              </span>
+            </span>
+          </span>
+          <span class="theme-meta">
+            <span class="theme-title">Dopamine-detox</span>
+            <span class="theme-subtitle">Premium</span>
+          </span>
+          <span class="theme-state">Locked</span>
+        </button>
+
+        <button class="theme-item theme-item--locked" type="button" data-theme="space" data-locked="true">
+          <span class="theme-thumb theme-thumb--locked" aria-hidden="true">
+            <span class="fg-premium-lock">
+              <span class="fg-premium-lock__shackle"></span>
+              <span class="fg-premium-lock__body">
+                <span class="fg-premium-lock__keyhole">
+                  <span class="fg-premium-lock__keyhole-circle"></span>
+                  <span class="fg-premium-lock__keyhole-slot"></span>
+                </span>
+              </span>
+            </span>
+          </span>
+          <span class="theme-meta">
+            <span class="theme-title">Space float</span>
+            <span class="theme-subtitle">Premium</span>
+          </span>
+          <span class="theme-state">Locked</span>
+        </button>
+
+        <button class="theme-item theme-item--locked" type="button" data-theme="breath" data-locked="true">
+          <span class="theme-thumb theme-thumb--locked" aria-hidden="true">
+            <span class="fg-premium-lock">
+              <span class="fg-premium-lock__shackle"></span>
+              <span class="fg-premium-lock__body">
+                <span class="fg-premium-lock__keyhole">
+                  <span class="fg-premium-lock__keyhole-circle"></span>
+                  <span class="fg-premium-lock__keyhole-slot"></span>
+                </span>
+              </span>
+            </span>
+          </span>
+          <span class="theme-meta">
+            <span class="theme-title">Breath in breath out</span>
+            <span class="theme-subtitle">Premium</span>
+          </span>
+          <span class="theme-state">Locked</span>
+        </button>
+
+        <button class="theme-item theme-item--locked" type="button" data-theme="cooked" data-locked="true">
+          <span class="theme-thumb theme-thumb--locked" aria-hidden="true">
+            <span class="fg-premium-lock">
+              <span class="fg-premium-lock__shackle"></span>
+              <span class="fg-premium-lock__body">
+                <span class="fg-premium-lock__keyhole">
+                  <span class="fg-premium-lock__keyhole-circle"></span>
+                  <span class="fg-premium-lock__keyhole-slot"></span>
+                </span>
+              </span>
+            </span>
+          </span>
+          <span class="theme-meta">
+            <span class="theme-title">We're cooked</span>
+            <span class="theme-subtitle">Premium</span>
+          </span>
+          <span class="theme-state">Locked</span>
+        </button>
+
+        <button class="theme-item theme-item--locked" type="button" data-theme="mycat" data-locked="true">
+          <span class="theme-thumb theme-thumb--locked" aria-hidden="true">
+            <span class="fg-premium-lock">
+              <span class="fg-premium-lock__shackle"></span>
+              <span class="fg-premium-lock__body">
+                <span class="fg-premium-lock__keyhole">
+                  <span class="fg-premium-lock__keyhole-circle"></span>
+                  <span class="fg-premium-lock__keyhole-slot"></span>
+                </span>
+              </span>
+            </span>
+          </span>
+          <span class="theme-meta">
+            <span class="theme-title">My cat</span>
+            <span class="theme-subtitle">Premium</span>
+          </span>
+          <span class="theme-state">Locked</span>
+        </button>
+
+        <button class="theme-item theme-item--locked" type="button" data-theme="sleepingdog" data-locked="true">
+          <span class="theme-thumb theme-thumb--locked" aria-hidden="true">
+            <span class="fg-premium-lock">
+              <span class="fg-premium-lock__shackle"></span>
+              <span class="fg-premium-lock__body">
+                <span class="fg-premium-lock__keyhole">
+                  <span class="fg-premium-lock__keyhole-circle"></span>
+                  <span class="fg-premium-lock__keyhole-slot"></span>
+                </span>
+              </span>
+            </span>
+          </span>
+          <span class="theme-meta">
+            <span class="theme-title">Sleeping dog</span>
+            <span class="theme-subtitle">Premium</span>
+          </span>
+          <span class="theme-state">Locked</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Custom domains -->
+    <section class="card">
+      <div class="card-label">Tracked sites</div>
+
+      <!-- Built-in list (defaults; populated by popup.js, each row can be removed) -->
+      <ul class="domain-list" id="builtin-list" aria-label="Built-in tracked sites"></ul>
+
+      <!-- Custom domain list -->
+      <ul class="domain-list" id="custom-domain-list" aria-label="Custom tracked sites">
+        <!-- Populated by popup.js -->
+      </ul>
+
+      <!-- Add domain input -->
+      <div class="add-domain-row">
+        <input
+          type="text"
+          id="custom-domain-input"
+          class="text-input"
+          placeholder="e.g. reddit.com"
+          aria-label="Add custom domain"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="add-domain-btn" class="btn btn-icon" aria-label="Add domain" title="Add">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-error" id="domain-error" role="alert" aria-live="polite"></div>
+    </section>
+
+    <!-- Actions -->
+    <div class="actions-row">
+      <button id="save-btn" class="btn btn-primary">Save settings</button>
+    </div>
+
+    <div class="save-status" id="save-status" role="status" aria-live="polite"></div>
+
+    <!-- Premium: weekly social usage analytics -->
+    <section class="card analytics-card" id="analytics-card" aria-label="Weekly social media time analytics">
+      <div class="analytics-card-head">
+        <div class="card-label analytics-title">Weekly social time</div>
+        <div class="analytics-week-toggle" role="group" aria-label="Week selection">
+          <button type="button" class="analytics-seg analytics-seg--active" id="analytics-week-this" data-week="0">This week</button>
+          <button type="button" class="analytics-seg" id="analytics-week-last" data-week="1">Last week</button>
+        </div>
+      </div>
+      <p class="analytics-sub">Active time on tracked social sites (when the break screen is not shown), by day.</p>
+      <div class="analytics-chart-shell">
+        <div class="analytics-chart-inner" id="analytics-chart-inner">
+          <canvas id="weekly-break-chart" class="weekly-break-chart" width="300" height="200" aria-hidden="true"></canvas>
+          <p class="analytics-tooltip" id="analytics-chart-tooltip" aria-live="polite"></p>
+        </div>
+        <div class="analytics-premium-gate" id="analytics-premium-gate" hidden>
+          <div class="analytics-premium-gate__panel">
+            <p class="analytics-premium-gate__title">Upgrade to Premium to unlock weekly insights</p>
+            <button type="button" class="btn btn-primary btn-compact" id="analytics-upgrade-btn">Upgrade</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+  </div>
+
+  <footer class="popup-footer">
+    <div id="billing-section-not-premium">
+      <div class="subscribe-copy">Unlock premium break screens &amp; weekly insights</div>
+      <div class="billing-actions" role="group" aria-label="Choose a plan">
+        <button type="button" class="btn-billing-secondary" id="subscribe-monthly-btn">Monthly</button>
+        <button type="button" class="btn-billing-secondary" id="subscribe-lifetime-btn">Lifetime</button>
+      </div>
+      <p class="billing-hint">Opens secure Stripe Checkout in a new tab.</p>
+      <div class="promo-row">
+        <input
+          type="text"
+          id="promo-input"
+          class="text-input promo-input"
+          placeholder="Early access code"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Promo or early access code"
+        />
+        <button type="button" class="btn btn-primary btn-compact" id="promo-redeem-btn">Redeem</button>
+      </div>
+      <button type="button" class="btn-billing-refresh" id="refresh-premium-btn">Refresh premium status</button>
+    </div>
+    <div id="billing-section-premium" hidden>
+      <p class="subscribe-copy subscribe-copy--premium">Premium active</p>
+      <button type="button" class="btn-billing-refresh" id="refresh-premium-btn-premium">Refresh status</button>
+    </div>
+  </footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

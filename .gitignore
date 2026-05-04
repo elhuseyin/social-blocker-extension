@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+
+# Backend local data
+backend/data/*.db
+backend/data/*.db-journal
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
