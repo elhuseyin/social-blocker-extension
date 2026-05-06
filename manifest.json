@@ -62,7 +62,11 @@
         "cat-animation.css",
         "entitlements.js",
         "assets/astronaut-float.png",
-        "assets/reset-mind-logo.png"
+        "assets/reset-mind-logo.png",
+        "assets/dopamine-detox-logo.png",
+        "assets/cat-stretch-logo.png",
+        "assets/breath-break-art.png",
+        "assets/were-cooked-logo.png"
       ],
       "matches": ["<all_urls>"]
     }

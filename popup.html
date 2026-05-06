@@ -106,7 +106,7 @@
         </button>
 
         <button class="theme-item" type="button" data-theme="cat">
-          <span class="theme-thumb theme-thumb--cat" aria-hidden="true">🐱</span>
+          <span class="theme-thumb theme-thumb--cat" aria-hidden="true"></span>
           <span class="theme-meta">
             <span class="theme-title">Cat stretch animation</span>
             <span class="theme-subtitle">Free</span>
@@ -316,13 +316,12 @@
   </div>
 
   <footer class="popup-footer">
-    <div id="billing-section-not-premium">
+    <!-- hidden until entitlements load — avoids subscribe UI flash for premium users -->
+    <div id="billing-section-not-premium" hidden>
       <div class="subscribe-copy">Unlock premium break screens &amp; weekly insights</div>
-      <div class="billing-actions" role="group" aria-label="Choose a plan">
-        <button type="button" class="btn-billing-secondary" id="subscribe-monthly-btn">Monthly</button>
-        <button type="button" class="btn-billing-secondary" id="subscribe-lifetime-btn">Lifetime</button>
+      <div class="billing-actions" role="group" aria-label="Subscribe">
+        <button type="button" class="btn-subscribe" id="subscribe-monthly-btn">Subscribe</button>
       </div>
-      <p class="billing-hint">Opens secure Stripe Checkout in a new tab.</p>
       <div class="promo-row">
         <input
           type="text"

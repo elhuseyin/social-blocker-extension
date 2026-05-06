@@ -513,35 +513,14 @@
 
   // ─── Overlay ─────────────────────────────────────────────────────────────────
 
-  /** Premium “Breath in breath out” — inline SVG + animations (styles in overlay.css). */
+  /** Premium “Breath in breath out” — full illustration (styles in overlay.css). */
   function getBreathScreenMarkup() {
+    const breathArtSrc = chrome.runtime.getURL("assets/breath-break-art.png");
     return `
-        <div id="fg-animation-container" class="fg-breath-wrap" aria-hidden="true">
-          <svg class="fg-breath-svg" width="100%" viewBox="0 0 680 680" role="img" xmlns="http://www.w3.org/2000/svg" focusable="false">
-            <title>Breath in, breath out</title>
-            <desc>Guided breathing visual for your break.</desc>
-            <g class="fg-breath-group-levitate">
-              <circle cx="340" cy="340" r="152" fill="none" stroke="#a5b4fc" stroke-width="0.8" class="fg-breath-ring3"/>
-              <circle cx="340" cy="340" r="120" fill="none" stroke="#93c5fd" stroke-width="1" class="fg-breath-ring2"/>
-              <circle cx="340" cy="340" r="90" fill="none" stroke="#7dd3fc" stroke-width="1.2" class="fg-breath-ring1"/>
-              <circle cx="340" cy="220" r="4" fill="#a5b4fc" class="fg-breath-d1"/>
-              <circle cx="340" cy="460" r="4" fill="#a5b4fc" class="fg-breath-d1"/>
-              <circle cx="220" cy="340" r="4" fill="#93c5fd" class="fg-breath-d2"/>
-              <circle cx="460" cy="340" r="4" fill="#93c5fd" class="fg-breath-d2"/>
-              <circle cx="269" cy="249" r="3" fill="#c4b5fd" opacity="0.5" class="fg-breath-d3"/>
-              <circle cx="411" cy="249" r="3" fill="#c4b5fd" opacity="0.5" class="fg-breath-d3"/>
-              <circle cx="269" cy="431" r="3" fill="#c4b5fd" opacity="0.5" class="fg-breath-d3"/>
-              <circle cx="411" cy="431" r="3" fill="#c4b5fd" opacity="0.5" class="fg-breath-d3"/>
-              <circle cx="340" cy="340" r="46" fill="#dde9ff" opacity="0.13" class="fg-breath-core"/>
-              <circle cx="340" cy="340" r="46" fill="none" stroke="#bfdbfe" stroke-width="1.5" class="fg-breath-core"/>
-              <circle cx="340" cy="340" r="26" fill="#ede9fe" opacity="0.18" class="fg-breath-inner"/>
-              <circle cx="340" cy="340" r="26" fill="none" stroke="#c4b5fd" stroke-width="1" class="fg-breath-inner"/>
-              <circle cx="340" cy="340" r="7" fill="#e0e7ff" opacity="0.95"/>
-              <circle cx="340" cy="340" r="3" fill="#a5b4fc" opacity="0.9"/>
-              <text x="260" y="345" text-anchor="middle" font-size="12" font-weight="400" letter-spacing="3" fill="#93c5fd" class="fg-breath-t-in">BREATHE IN</text>
-              <text x="422" y="345" text-anchor="middle" font-size="12" font-weight="400" letter-spacing="3" fill="#a5b4fc" class="fg-breath-t-out">BREATHE OUT</text>
-            </g>
-          </svg>
+        <div id="fg-animation-container" class="fg-breath-wrap fg-breath-wrap--art-only" aria-hidden="true">
+          <div class="fg-breath-art-wrap">
+            <img class="fg-breath-art" src="${breathArtSrc}" alt="Meditation pose — breathe in, breathe out." width="640" height="640" decoding="async" />
+          </div>
         </div>
       `;
   }
@@ -558,11 +537,21 @@
     const isSpaceTheme = breakScreen === "space";
     const isBreathTheme = breakScreen === "breath";
     const isQuotesTheme = isQuoteBreakTheme(breakScreen);
+    const quoteScreenLogoSrc =
+      breakScreen === "night"
+        ? chrome.runtime.getURL("assets/dopamine-detox-logo.png")
+        : breakScreen === "cooked"
+          ? chrome.runtime.getURL("assets/were-cooked-logo.png")
+          : "";
     const premiumPlaceholder = getPremiumPlaceholderTheme(breakScreen);
     const astronautSrc = isSpaceTheme ? chrome.runtime.getURL("assets/astronaut-float.png") : "";
+    const catStretchLogoSrc = isCatTheme ? chrome.runtime.getURL("assets/cat-stretch-logo.png") : "";
     const catCssAnimMarkup = isCatTheme
       ? `
-        <div id="fg-animation-container" class="fg-cat-wrap" aria-hidden="true">
+        <div id="fg-animation-container" class="fg-cat-wrap fg-cat-wrap--with-logo" aria-hidden="true">
+          <div class="fg-cat-logo-wrap" aria-hidden="true">
+            <img class="fg-cat-logo" src="${catStretchLogoSrc}" alt="" width="120" height="120" decoding="async" />
+          </div>
           <div class="cat-container">
             <div class="cat">
               <div class="ear left"></div>
@@ -585,7 +574,12 @@
       ? ""
       : isQuotesTheme
       ? `
-        <div id="fg-animation-container" class="fg-quote-wrap">
+        <div id="fg-animation-container" class="fg-quote-wrap${quoteScreenLogoSrc ? " fg-quote-wrap--with-logo" : ""}">
+          ${
+            quoteScreenLogoSrc
+              ? `<div class="fg-quote-screen-logo-wrap" aria-hidden="true"><img class="fg-quote-screen-logo" src="${quoteScreenLogoSrc}" alt="" width="200" height="260" decoding="async" /></div>`
+              : ""
+          }
           <figure id="fg-quote-card" aria-live="polite">
             <blockquote id="fg-quote-text"></blockquote>
             <figcaption id="fg-quote-author"></figcaption>

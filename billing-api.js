@@ -69,7 +69,10 @@ export async function createCheckoutSession(mode) {
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    return { error: data.error || `http_${res.status}` };
+    return {
+      error: data.error || `http_${res.status}`,
+      detail: typeof data.detail === "string" ? data.detail : undefined
+    };
   }
   if (!data.url) {
     return { error: "no_checkout_url" };
@@ -96,8 +99,6 @@ export async function redeemPromoCode(code) {
   if (!res.ok) {
     return { error: data.error || `http_${res.status}` };
   }
-  if (data.subscribed) {
-    await chrome.storage.local.set({ subscribed: true });
-  }
+  await chrome.storage.local.set({ subscribed: true });
   return { ok: true };
 }

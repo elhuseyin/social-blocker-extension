@@ -33,10 +33,14 @@ const BUILTIN_PRESETS = [
   { id: "twitter", label: "x.com / twitter.com", icon: "𝕏", domains: ["twitter.com", "x.com"] }
 ];
 
-/** Popup thumb image per premium `data-theme` (paths under extension root). Add entries as logos ship. */
-const PREMIUM_THEME_LOGO_PATH = {
+/** Break theme row thumb images (extension root paths). Cat is free; others premium. */
+const THEME_THUMB_IMAGE = {
+  cat: "assets/cat-stretch-logo.png",
+  night: "assets/dopamine-detox-logo.png",
+  cooked: "assets/were-cooked-logo.png",
   forest: "assets/reset-mind-logo.png",
-  space: "assets/astronaut-float.png"
+  space: "assets/astronaut-float.png",
+  breath: "assets/breath-break-art.png"
 };
 
 const PREMIUM_LOCK_THUMB_HTML = `
@@ -79,7 +83,6 @@ const els = {
   billingSectionNotPremium: $("billing-section-not-premium"),
   billingSectionPremium:    $("billing-section-premium"),
   subscribeMonthlyBtn:      $("subscribe-monthly-btn"),
-  subscribeLifetimeBtn:     $("subscribe-lifetime-btn"),
   promoInput:               $("promo-input"),
   promoRedeemBtn:           $("promo-redeem-btn"),
   refreshPremiumBtn:        $("refresh-premium-btn"),
@@ -119,10 +122,11 @@ function sumUsageMs(usage) {
 function showSaveStatus(msg, isError = false) {
   els.saveStatus.textContent = msg;
   els.saveStatus.className   = "save-status " + (isError ? "save-status--error" : "save-status--ok");
+  const ms = isError ? 8000 : 2500;
   setTimeout(() => {
     els.saveStatus.textContent = "";
     els.saveStatus.className   = "save-status";
-  }, 2500);
+  }, ms);
 }
 
 // ─── Domain validation ────────────────────────────────────────────────────
@@ -217,26 +221,42 @@ function isPremiumUnlocked() {
   return entitlementsCache.isSubscribed;
 }
 
-/** Gold lock vs theme logo in each premium break row thumb. */
+/** Theme row thumbs: free cat logo; premium rows use asset or lock / lock over dimmed logo. */
 function renderPremiumBreakThumbs() {
   if (!els.breakThemeList) return;
+
+  const catThumb = els.breakThemeList.querySelector('.theme-item[data-theme="cat"] .theme-thumb');
+  if (catThumb && THEME_THUMB_IMAGE.cat) {
+    const src = chrome.runtime.getURL(THEME_THUMB_IMAGE.cat);
+    catThumb.className = "theme-thumb theme-thumb--theme-logo";
+    catThumb.innerHTML = `<img src="${src}" alt="" role="presentation" decoding="async" loading="lazy" />`;
+  }
+
   els.breakThemeList.querySelectorAll(".theme-item[data-locked] .theme-thumb").forEach((thumb) => {
     const row = thumb.closest(".theme-item");
     const theme = row?.dataset.theme;
     if (!theme) return;
 
+    const logoPath = THEME_THUMB_IMAGE[theme];
+
     if (!isPremiumUnlocked()) {
-      thumb.className = "theme-thumb theme-thumb--locked";
-      thumb.innerHTML = PREMIUM_LOCK_THUMB_HTML;
+      if (logoPath) {
+        const src = chrome.runtime.getURL(logoPath);
+        thumb.className = "theme-thumb theme-thumb--locked theme-thumb--locked-with-logo";
+        thumb.innerHTML = `
+          <img class="theme-thumb-lock-bg" src="${src}" alt="" role="presentation" decoding="async" loading="lazy" />
+          <span class="theme-thumb-lock-front" aria-hidden="true">${PREMIUM_LOCK_THUMB_HTML}</span>
+        `;
+      } else {
+        thumb.className = "theme-thumb theme-thumb--locked";
+        thumb.innerHTML = PREMIUM_LOCK_THUMB_HTML;
+      }
       return;
     }
 
-    const logoPath = PREMIUM_THEME_LOGO_PATH[theme];
     if (logoPath) {
       thumb.className = "theme-thumb theme-thumb--premium-logo";
-      const src = chrome.runtime.getURL(logoPath);
-      thumb.innerHTML =
-        `<img src="${src}" alt="" role="presentation" decoding="async" loading="lazy" />`;
+      thumb.innerHTML = `<img src="${chrome.runtime.getURL(logoPath)}" alt="" role="presentation" decoding="async" loading="lazy" />`;
     } else {
       thumb.className = "theme-thumb theme-thumb--premium-logo theme-thumb--premium-logo-placeholder";
       thumb.innerHTML = "";
@@ -606,17 +626,33 @@ if (els.breakThemeList) {
   });
 }
 
+function checkoutErrorMessage(error, detail) {
+  const base =
+    error === "network"
+      ? "Could not reach billing server."
+      : error === "price_not_configured"
+        ? "Server missing STRIPE_PRICE_SUBSCRIPTION (and one-time price) in .env."
+        : error === "unauthorized"
+          ? "Billing API rejected the request — set BILLING_CLIENT_SECRET the same in billing-config.js and backend/.env, or clear it in both."
+          : error === "checkout_failed"
+            ? "Stripe rejected checkout — check STRIPE_SECRET_KEY and STRIPE_PRICE_SUBSCRIPTION in backend/.env (price must be a recurring subscription price)."
+            : error === "no_checkout_url"
+              ? "Server returned no checkout URL."
+              : error === "invalid_extension_user_id" || error === "invalid_mode"
+                ? "Invalid billing request."
+                : error && String(error).startsWith("http_")
+                  ? `Billing server error (${error.replace(/^http_/, "")}).`
+                  : "Could not start checkout.";
+  const d = detail ? String(detail).trim().slice(0, 160) : "";
+  return d ? `${base} — ${d}` : base;
+}
+
 async function openStripeCheckout(mode) {
   showSaveStatus("Opening checkout…");
-  const { url, error } = await createCheckoutSession(mode);
+  const { url, error, detail } = await createCheckoutSession(mode);
   if (error || !url) {
-    const msg =
-      error === "network"
-        ? "Could not reach billing server."
-        : error === "price_not_configured"
-          ? "Server missing Stripe price IDs."
-          : "Could not start checkout.";
-    showSaveStatus(msg, true);
+    log("Checkout failed:", error, detail || "");
+    showSaveStatus(checkoutErrorMessage(error, detail), true);
     return;
   }
   try {
@@ -630,9 +666,6 @@ async function openStripeCheckout(mode) {
 
 if (els.subscribeMonthlyBtn) {
   els.subscribeMonthlyBtn.addEventListener("click", () => void openStripeCheckout("subscription"));
-}
-if (els.subscribeLifetimeBtn) {
-  els.subscribeLifetimeBtn.addEventListener("click", () => void openStripeCheckout("payment"));
 }
 
 if (els.promoRedeemBtn && els.promoInput) {

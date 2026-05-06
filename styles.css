@@ -519,6 +519,54 @@ body {
   background: linear-gradient(135deg, rgba(255, 193, 117, 0.3), rgba(255, 160, 122, 0.26));
 }
 
+/* Free cat row + any theme thumb that uses a raster logo (see THEME_THUMB_IMAGE in popup.js) */
+.theme-thumb--theme-logo {
+  background: #0c0c0f;
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  padding: 0;
+  overflow: hidden;
+}
+
+.theme-thumb--theme-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  border-radius: 9px;
+}
+
+.theme-thumb--locked-with-logo {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  background: #0c0c0f;
+}
+
+.theme-thumb--locked-with-logo .theme-thumb-lock-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 9px;
+  filter: brightness(0.42) saturate(0.88);
+}
+
+.theme-thumb--locked-with-logo .theme-thumb-lock-front {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.theme-thumb--locked-with-logo .fg-premium-lock {
+  transform: scale(0.88);
+}
+
 .theme-thumb--locked {
   background: rgba(17, 24, 39, 0.08);
   padding: 0;
@@ -593,7 +641,7 @@ body {
   margin-top: -1px;
 }
 
-/* Premium unlocked — break screen thumb shows logo image (see PREMIUM_THEME_LOGO_PATH in popup.js) */
+/* Premium unlocked — break screen thumb shows logo image (see THEME_THUMB_IMAGE in popup.js) */
 .theme-thumb--premium-logo {
   background: #0c0c0f;
   border: 1px solid rgba(167, 139, 250, 0.22);
@@ -887,6 +935,7 @@ body {
 
 .billing-actions {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   margin-bottom: 6px;
 }
@@ -908,16 +957,6 @@ body {
 .btn-billing-secondary:hover {
   background: rgba(167, 139, 250, 0.2);
   border-color: rgba(167, 139, 250, 0.35);
-}
-
-.billing-hint {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  text-align: center;
-  margin: 0 0 10px;
-  line-height: 1.4;
 }
 
 .promo-row {
