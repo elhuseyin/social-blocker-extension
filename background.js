@@ -5,14 +5,14 @@
  */
 
 import { getEntitlements, resolveBreakScreen } from "./entitlements.js";
-import { addSocialUsageMsForSpan } from "./social-usage-daily-tracker.js";
+import { addSocialUsageMsForSpan, localDateKey, startOfLocalDayMs } from "./social-usage-daily-tracker.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const DEFAULT_SETTINGS = {
   enabled: true,
-  breakInterval: 0.5,        // minutes before a break is triggered
-  breakDuration: 0.5,        // minutes the break lasts
+  breakInterval: 30,         // minutes before a break is triggered (matches popup defaults)
+  breakDuration: 10,         // minutes the break lasts
   allowSkip: true,          // show "Skip break" button in overlay
   breakScreen: "default",   // selected break overlay theme
   customDomains: [],        // user-added domains
@@ -45,7 +45,9 @@ let state = {
   breakEndsAt:       null,   // epoch ms when break ends
   breakStartedAt:    null,   // epoch ms when current break started (analytics)
   settings:          { ...DEFAULT_SETTINGS },
-  usage:             {},     // { "instagram.com": totalMs, ... }
+  usage:             {},     // { "instagram.com": totalMs, ... } — per local calendar day (usageDayKey)
+  /** YYYY-MM-DD (local): which day `usage` applies to; rolls over at local midnight. */
+  usageDayKey:       null,
   /** In-memory only: daily social analytics persist on session end, not each tick. */
   socialSessionDomain:   null,
   socialSessionStartedAt: null
@@ -210,6 +212,7 @@ function isBlockedDomain(domain) {
 async function persistState() {
   await chrome.storage.local.set({
     usage:          state.usage,
+    usageDayKey:    state.usageDayKey,
     breakActive:    state.breakActive,
     breakEndsAt:    state.breakEndsAt,
     breakStartedAt: state.breakStartedAt
@@ -231,13 +234,29 @@ async function loadState() {
   const data = await chrome.storage.local.get([
     "settings",
     "usage",
+    "usageDayKey",
     "breakActive",
     "breakEndsAt",
     "breakStartedAt"
   ]);
   state.settings    = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
   await normalizeBreakScreenInState();
-  state.usage       = data.usage       || {};
+  const todayKey = localDateKey();
+  const persistedDayKey = data.usageDayKey;
+  let usageNeedsPersist = false;
+  if (persistedDayKey == null) {
+    // First install or upgrade: bucket usage by local day from now on.
+    state.usage = {};
+    state.usageDayKey = todayKey;
+    usageNeedsPersist = true;
+  } else if (persistedDayKey !== todayKey) {
+    state.usage = {};
+    state.usageDayKey = todayKey;
+    usageNeedsPersist = true;
+  } else {
+    state.usage = data.usage || {};
+    state.usageDayKey = persistedDayKey;
+  }
   state.breakActive = data.breakActive || false;
   state.breakEndsAt = data.breakEndsAt || null;
   state.breakStartedAt = data.breakStartedAt ?? null;
@@ -246,6 +265,9 @@ async function loadState() {
     state.breakStartedAt = state.breakEndsAt - planned;
   }
   log("State loaded from storage:", state.usage, "breakActive:", state.breakActive);
+  if (usageNeedsPersist) {
+    await persistState();
+  }
 }
 
 /** Get cumulative ms for a domain this session-period. */
@@ -270,6 +292,20 @@ function resetUsage(domain) {
 function resetAllUsage() {
   state.usage = {};
   log("All usage reset (post-break).");
+}
+
+/**
+ * When the local calendar day changes, clear interval usage so the popup and
+ * break threshold count only today's time on tracked sites.
+ * @returns {boolean} true if state was reset and should be persisted
+ */
+function syncUsageToCalendarDay(now = Date.now()) {
+  const todayKey = localDateKey(now);
+  if (state.usageDayKey === todayKey) return false;
+  state.usage = {};
+  state.usageDayKey = todayKey;
+  log("Usage reset for new local day:", todayKey);
+  return true;
 }
 
 /** Write accumulated social time for the current focus session to storage (split across local days). */
@@ -378,6 +414,10 @@ async function notifyTab(tabId, type, payload) {
 async function onTick() {
   const now = Date.now();
 
+  if (syncUsageToCalendarDay(now)) {
+    await persistState();
+  }
+
   if (!state.settings.enabled) {
     if (state.socialSessionStartedAt != null) await flushSocialSession(now);
     return;
@@ -405,8 +445,9 @@ async function onTick() {
 
   // ── Accumulate usage for active blocked tab ────────────────────────────────
   if (state.activeTabId !== null && state.activeTabDomain && state.lastTickTime) {
-    const tickStart = state.lastTickTime;
-    const elapsed = now - tickStart;
+    const todayStart = startOfLocalDayMs(now);
+    const tickStart = Math.max(state.lastTickTime, todayStart);
+    const elapsed = Math.max(0, now - tickStart);
     addUsageMs(state.activeTabDomain, elapsed);
     await persistState();
 
@@ -523,6 +564,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
 
       case "GET_STATUS": {
+        if (syncUsageToCalendarDay(Date.now())) {
+          await persistState();
+        }
         const { isSubscribed, devMode } = await getEntitlements();
         sendResponse({
           breakActive:   state.breakActive,

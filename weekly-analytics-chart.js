@@ -11,6 +11,69 @@ const COLORS = {
   text: "rgba(243, 244, 246, 0.5)"
 };
 
+/** Chart `v` is decimal hours (same as storage aggregation). */
+const USAGE_RED_OVER_HOURS = 1;
+const USAGE_GREEN_UNDER_HOURS = 10 / 60;
+
+const BAR_TIER = {
+  red: {
+    bar: "rgba(248, 113, 113, 0.9)",
+    hover: "rgba(252, 165, 165, 0.98)"
+  },
+  green: {
+    bar: "rgba(52, 211, 153, 0.88)",
+    hover: "rgba(110, 231, 183, 0.98)"
+  },
+  purple: {
+    bar: COLORS.bar,
+    hover: COLORS.barHover
+  }
+};
+
+/** @param {number} decimalHours */
+function barTierColors(decimalHours) {
+  const v = decimalHours;
+  if (v > USAGE_RED_OVER_HOURS) return BAR_TIER.red;
+  if (v < USAGE_GREEN_UNDER_HOURS) return BAR_TIER.green;
+  return BAR_TIER.purple;
+}
+
+/** @param {number} decimalHours */
+function totalMinutesFromDecimalHours(decimalHours) {
+  return Math.round(Math.max(0, decimalHours) * 60);
+}
+
+/**
+ * Y-axis tick: compact, same meaning as hover (MM = minutes past the hour when ≥1h).
+ * @param {number} decimalHours
+ */
+function formatYAxisTick(decimalHours) {
+  const totalMinutes = totalMinutesFromDecimalHours(decimalHours);
+  if (totalMinutes <= 0) return "0";
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${h}.${String(m).padStart(2, "0")}h`;
+}
+
+/**
+ * Tooltip text from chart values stored as decimal hours.
+ * Under 1 hour: "N minutes". At least 1 hour: "H.MM hours" (MM = minutes past the hour).
+ * @param {number} decimalHours
+ */
+function formatHoverDuration(decimalHours) {
+  const totalMinutes = totalMinutesFromDecimalHours(decimalHours);
+  if (totalMinutes < 60) {
+    if (totalMinutes <= 0) return "0 minutes";
+    return totalMinutes === 1 ? "1 minute" : `${totalMinutes} minutes`;
+  }
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  const mm = String(m).padStart(2, "0");
+  const unit = h === 1 && m === 0 ? "hour" : "hours";
+  return `${h}.${mm} ${unit}`;
+}
+
 /**
  * @param {HTMLCanvasElement} canvas
  * @param {Record<string, number>} byDay
@@ -41,7 +104,7 @@ export function renderWeeklyUsageChart(canvas, byDay, opts = {}) {
 
     const w = cssW;
     const h = cssH;
-    const padL = 34;
+    const padL = 40;
     const padR = 8;
     const padT = 12;
     const padB = 26;
@@ -69,7 +132,7 @@ export function renderWeeklyUsageChart(canvas, byDay, opts = {}) {
       ctx.moveTo(padL, y);
       ctx.lineTo(padL + chartW, y);
       ctx.stroke();
-      ctx.fillText(`${hr.toFixed(1)}h`, 2, y + 3);
+      ctx.fillText(formatYAxisTick(hr), 2, y + 3);
     }
 
     barRects = [];
@@ -80,7 +143,8 @@ export function renderWeeklyUsageChart(canvas, byDay, opts = {}) {
       const y = padT + chartH - bh;
       barRects.push({ day, x, y, w: barW, h: bh, hours: v });
       const isH = hoverDay === day;
-      ctx.fillStyle = isH ? COLORS.barHover : COLORS.bar;
+      const tier = barTierColors(v);
+      ctx.fillStyle = isH ? tier.hover : tier.bar;
       const r = 4;
       ctx.beginPath();
       if (typeof ctx.roundRect === "function") {
@@ -117,7 +181,7 @@ export function renderWeeklyUsageChart(canvas, byDay, opts = {}) {
     if (next !== hoverDay) {
       hoverDay = next;
       draw();
-      if (h) onHoverLabel(`${h.day}: ${h.hours.toFixed(2)} hours`, h.hours);
+      if (h) onHoverLabel(`${h.day}: ${formatHoverDuration(h.hours)}`, h.hours);
       else onHoverLabel(null, null);
     }
   }

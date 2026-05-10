@@ -11,6 +11,7 @@ import {
   ensureExtensionUserId,
   syncPremiumFromServer,
   createCheckoutSession,
+  createBillingPortalSession,
   redeemPromoCode
 } from "./billing-api.js";
 
@@ -18,7 +19,7 @@ const LOG_PREFIX = "[FocusGuard Popup]";
 
 const DEFAULT_SETTINGS = {
   enabled:       true,
-  breakInterval: 0.5,
+  breakInterval: 30,
   breakDuration: 10,
   allowSkip:     true,
   breakScreen:   "default",
@@ -86,8 +87,7 @@ const els = {
   promoInput:               $("promo-input"),
   promoRedeemBtn:           $("promo-redeem-btn"),
   refreshPremiumBtn:        $("refresh-premium-btn"),
-  refreshPremiumBtnPremium: $("refresh-premium-btn-premium"),
-  devModeBadge:      $("dev-mode-badge"),
+  manageSubscriptionBtn:    $("manage-subscription-btn"),
 
   saveBtn:           $("save-btn"),
   saveStatus:        $("save-status"),
@@ -212,7 +212,7 @@ let currentSettings = { ...DEFAULT_SETTINGS };
 /** Theme choice in the list (may differ from storage until Save). */
 let breakScreenDraft = DEFAULT_SETTINGS.breakScreen;
 let currentStatus   = null;
-let entitlementsCache = { isSubscribed: false, devMode: false };
+let entitlementsCache = { isSubscribed: false, devMode: false, stripeSubscribed: false };
 
 let weeklyChartTeardown = null;
 let analyticsWeekOffset = 0;
@@ -277,11 +277,6 @@ function applyPremiumThemeState() {
   renderPremiumBreakThumbs();
 }
 
-function renderDevModeBadge() {
-  if (!els.devModeBadge) return;
-  els.devModeBadge.hidden = !entitlementsCache.devMode;
-}
-
 function updateBillingFooterVisibility() {
   const premium = isPremiumUnlocked();
   if (els.billingSectionNotPremium) {
@@ -289,6 +284,9 @@ function updateBillingFooterVisibility() {
   }
   if (els.billingSectionPremium) {
     els.billingSectionPremium.hidden = !premium;
+  }
+  if (els.manageSubscriptionBtn) {
+    els.manageSubscriptionBtn.hidden = !premium || !entitlementsCache.stripeSubscribed;
   }
 }
 
@@ -302,10 +300,9 @@ async function refreshEntitlementsUI(options = {}) {
     }
   }
 
-  const { isSubscribed, devMode } = await getEntitlements();
-  entitlementsCache = { isSubscribed, devMode };
+  const { isSubscribed, devMode, stripeSubscribed } = await getEntitlements();
+  entitlementsCache = { isSubscribed, devMode, stripeSubscribed };
   applyPremiumThemeState();
-  renderDevModeBadge();
   updateBillingFooterVisibility();
   breakScreenDraft = await resolveBreakScreen(
     currentSettings.breakScreenPending ?? currentSettings.breakScreen
@@ -458,10 +455,10 @@ function updateStatusUI() {
     els.statusText.textContent = `Break active — ${formatMs(remaining)} remaining`;
   } else if (activeDomain) {
     els.statusDot.className    = "status-dot dot-active";
-    els.statusText.textContent = `Tracking ${activeDomain}`;
+    els.statusText.textContent = "Tracking";
   } else {
     els.statusDot.className    = "status-dot dot-idle";
-    els.statusText.textContent = "No social site active";
+    els.statusText.textContent = "No tracked site";
   }
 
   // Usage card — big number = current (or primary) site; bar + legend = combined across all sites
@@ -477,7 +474,7 @@ function updateStatusUI() {
   els.usageBarFill.className     = `usage-bar-fill ${pctCombined >= 90 ? "bar-danger" : pctCombined >= 60 ? "bar-warn" : ""}`;
   els.usageBarLegend.textContent = domain || combinedMs > 0
     ? `${formatMs(combinedMs)} / ${formatMs(intMs)}`
-    : "Visit a social site to start tracking";
+    : "Start tracking sites";
 
   renderSiteUsageList(usage, intMs);
 }
@@ -524,7 +521,7 @@ function renderSiteUsageList(usage, intervalMs) {
     .sort((a, b) => b[1] - a[1]);
 
   if (!entries.length) {
-    els.siteUsageList.innerHTML = `<li class="site-usage-empty">Visit tracked sites to start tracking.</li>`;
+    els.siteUsageList.innerHTML = `<li class="site-usage-empty">Start tracking sites</li>`;
     return;
   }
 
@@ -664,6 +661,43 @@ async function openStripeCheckout(mode) {
   }
 }
 
+function portalErrorMessage(error, detail) {
+  const base =
+    error === "network"
+      ? "Could not reach billing server."
+      : error === "dev_mode"
+        ? "Not available in dev mode."
+        : error === "unauthorized"
+          ? "Billing API rejected the request — check BILLING_CLIENT_SECRET."
+          : error === "no_portal_url"
+            ? "Server returned no portal URL."
+            : error === "not_subscribed"
+              ? "No subscription on file."
+              : error && String(error).startsWith("http_")
+                ? `Billing server error (${error.replace(/^http_/, "")}).`
+                : "Could not open subscription management.";
+  const d = detail ? String(detail).trim().slice(0, 160) : "";
+  return d ? `${base} — ${d}` : base;
+}
+
+/** “Manage subscription” → Stripe Customer Portal URL from the billing API. */
+async function openBillingPortal() {
+  showSaveStatus("Opening subscription page…");
+  const { url, error, detail } = await createBillingPortalSession();
+  if (error || !url) {
+    log("Billing portal failed:", error, detail || "");
+    showSaveStatus(portalErrorMessage(error, detail), true);
+    return;
+  }
+  try {
+    await chrome.tabs.create({ url });
+    showSaveStatus("Manage your plan in the new tab.");
+  } catch (err) {
+    log("Failed to open billing portal:", err);
+    showSaveStatus("Could not open browser tab.", true);
+  }
+}
+
 if (els.subscribeMonthlyBtn) {
   els.subscribeMonthlyBtn.addEventListener("click", () => void openStripeCheckout("subscription"));
 }
@@ -717,8 +751,9 @@ async function manualRefreshPremium() {
 if (els.refreshPremiumBtn) {
   els.refreshPremiumBtn.addEventListener("click", () => void manualRefreshPremium());
 }
-if (els.refreshPremiumBtnPremium) {
-  els.refreshPremiumBtnPremium.addEventListener("click", () => void manualRefreshPremium());
+
+if (els.manageSubscriptionBtn) {
+  els.manageSubscriptionBtn.addEventListener("click", () => void openBillingPortal());
 }
 
 if (els.promoInput) {

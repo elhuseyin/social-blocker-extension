@@ -31,7 +31,9 @@ export async function getEntitlements() {
 
   return {
     isSubscribed: Boolean(subscribed) || Boolean(devMode),
-    devMode: Boolean(devMode)
+    devMode: Boolean(devMode),
+    /** True when `subscribed` is set in storage (Stripe or promo); false for devMode-only premium. */
+    stripeSubscribed: Boolean(subscribed)
   };
 }
 

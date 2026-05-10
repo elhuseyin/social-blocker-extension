@@ -81,6 +81,41 @@ export async function createCheckoutSession(mode) {
 }
 
 /**
+ * Opens the Stripe Customer Portal (cancel plan, update payment method, invoices).
+ * Backend should call `stripe.billingPortal.sessions.create`, then return the session URL.
+ *
+ * Contract: `POST /api/billing-portal` with JSON `{ extensionUserId }` → `{ url: string }`.
+ * @returns {{ url?: string, error?: string, detail?: string }}
+ */
+export async function createBillingPortalSession() {
+  const { devMode } = await chrome.storage.local.get("devMode");
+  if (devMode) return { error: "dev_mode" };
+
+  const extensionUserId = await ensureExtensionUserId();
+  let res;
+  try {
+    res = await fetch(`${BILLING_API_BASE}/api/billing-portal`, {
+      method: "POST",
+      headers: billingHeaders(true),
+      body: JSON.stringify({ extensionUserId })
+    });
+  } catch {
+    return { error: "network" };
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return {
+      error: data.error || `http_${res.status}`,
+      detail: typeof data.detail === "string" ? data.detail : undefined
+    };
+  }
+  if (!data.url) {
+    return { error: "no_portal_url" };
+  }
+  return { url: data.url };
+}
+
+/**
  * @returns {{ ok?: boolean, error?: string }}
  */
 export async function redeemPromoCode(code) {

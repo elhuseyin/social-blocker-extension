@@ -40,6 +40,13 @@ function startOfNextLocalDay(ts) {
   return d.getTime();
 }
 
+/** Local midnight (00:00) for the calendar day containing `ts` (epoch ms). */
+export function startOfLocalDayMs(ts = Date.now()) {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 function pruneOldDates(/** @type {Record<string, Record<string, number>>} */ byDate, nowTs) {
   const cutoff = new Date(nowTs);
   cutoff.setDate(cutoff.getDate() - MAX_RETENTION_DAYS);
