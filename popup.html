@@ -64,6 +64,7 @@
       <div class="field-group">
         <label class="field-label" for="break-interval">Break every</label>
         <select id="break-interval" class="select">
+          <option value="0.5">30 seconds (testing)</option>
           <option value="30">30 minutes</option>
           <option value="60">1 hour</option>
           <option value="120">2 hours</option>
@@ -73,6 +74,7 @@
       <div class="field-group">
         <label class="field-label" for="break-duration">Break lasts</label>
         <select id="break-duration" class="select">
+          <option value="0.5">30 seconds (testing)</option>
           <option value="5">5 minutes</option>
           <option value="10">10 minutes</option>
           <option value="15">15 minutes</option>
@@ -296,7 +298,6 @@
           <button type="button" class="analytics-seg" id="analytics-week-last" data-week="1">Last week</button>
         </div>
       </div>
-      <p class="analytics-sub">Active time on tracked social sites (when the break screen is not shown), by day.</p>
       <div class="analytics-chart-shell">
         <div class="analytics-chart-inner" id="analytics-chart-inner">
           <canvas id="weekly-break-chart" class="weekly-break-chart" width="300" height="200" aria-hidden="true"></canvas>

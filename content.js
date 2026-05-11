@@ -51,6 +51,18 @@
   /** Tear down GIPHY reaction on Skip (Dopamine detox) before removing overlay. */
   let giphySkipProximityTeardown = null;
 
+  /** Fullscreen break video (Sleeping dog) — pause/unload + visibility listener cleanup. */
+  let sleepingDogVideoTeardown = null;
+
+  /**
+   * Escape-to-skip for video-only break theme. Registered with capture:true before freezePage()
+   * so we still receive Escape when focus is on the frozen page.
+   */
+  let sleepingDogEscapeTeardown = null;
+
+  /** Mirrors injectOverlay allowSkip for the Escape handler. */
+  let sleepingDogAllowSkip = false;
+
   // ─── Skip-button hover reaction GIF (night / Dopamine detox only) ───────────
 
   const GIPHY_SKIP_REACTION_GIF_URL =
@@ -340,8 +352,7 @@
 
   /** Premium screens with an empty slot for future content (see overlay.css per theme). */
   const PREMIUM_PLACEHOLDER_THEMES = {
-    mycat:       { wrapClass: "fg-mycat-wrap", slotId: "fg-mycat-slot", headline: "My cat" },
-    sleepingdog: { wrapClass: "fg-sleepingdog-wrap", slotId: "fg-sleepingdog-slot", headline: "Sleeping dog" }
+    mycat: { wrapClass: "fg-mycat-wrap", slotId: "fg-mycat-slot", headline: "My cat" }
   };
 
   function getPremiumPlaceholderTheme(screen) {
@@ -511,6 +522,284 @@
     }
   }
 
+  /**
+   * Add `assets/sleeping-dog.mp4` (and optionally `.webm` / `.mov`) plus matching manifest
+   * `web_accessible_resources` entries when you ship a clip. Order: MP4 → WebM → MOV.
+   */
+  const SLEEPING_DOG_VIDEO_SOURCES = [
+    { file: "assets/sleeping-dog.mp4", type: 'video/mp4; codecs="avc1.4D401E"' },
+    { file: "assets/sleeping-dog.webm", type: "video/webm" },
+    { file: "assets/sleeping-dog.mov", type: "video/quicktime" }
+  ];
+
+  let webAccessibleAssetsCache = null;
+  function getWebAccessibleAssets() {
+    if (webAccessibleAssetsCache) return webAccessibleAssetsCache;
+    const set = new Set();
+    try {
+      const war = chrome.runtime.getManifest().web_accessible_resources;
+      if (Array.isArray(war)) {
+        for (let i = 0; i < war.length; i++) {
+          const res = war[i] && war[i].resources;
+          if (!Array.isArray(res)) continue;
+          for (let j = 0; j < res.length; j++) {
+            set.add(res[j]);
+          }
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    webAccessibleAssetsCache = set;
+    return set;
+  }
+
+  function teardownSleepingDogMedia() {
+    if (typeof sleepingDogVideoTeardown === "function") {
+      try {
+        sleepingDogVideoTeardown();
+      } catch (e) {
+        log("Sleeping dog video teardown error:", e);
+      }
+    }
+    sleepingDogVideoTeardown = null;
+    if (typeof sleepingDogEscapeTeardown === "function") {
+      try {
+        sleepingDogEscapeTeardown();
+      } catch (e) {
+        log("Sleeping dog escape teardown error:", e);
+      }
+    }
+    sleepingDogEscapeTeardown = null;
+    sleepingDogAllowSkip = false;
+  }
+
+  /**
+   * Escape skips only when allowSkip — registered before freezePage() capture listeners
+   * so Escape still works while the host page is input-frozen.
+   */
+  function registerSleepingDogEscapeHandler(allowSkip) {
+    sleepingDogAllowSkip = !!allowSkip;
+    if (!allowSkip) return () => {};
+    const onKeyDown = (e) => {
+      if (activeBreakScreen !== "sleepingdog" || !sleepingDogAllowSkip || !overlayEl) return;
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      log("Sleeping dog: skip via Escape.");
+      void chrome.runtime.sendMessage({ type: "SKIP_BREAK" }).catch(() => {});
+      removeOverlay();
+    };
+    document.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, { capture: true });
+    };
+  }
+
+  /**
+   * Native loop + muted autoplay. One URL at a time: on decode/network error we advance — avoids a stuck
+   * black decode layer from an unsupported codec. `loadeddata` reveals after first frame (works with opacity fade).
+   */
+  function setupSleepingDogVideo(overlayRoot) {
+    const root = overlayRoot;
+    const errEl = overlayRoot.querySelector("#fg-sleepingdog-error");
+
+    const slot = overlayRoot.querySelector("#fg-sleepingdog-video-slot");
+    slot?.querySelector("#fg-sleepingdog-video-mount")?.remove();
+
+    const shell = document.createElement("div");
+    shell.id = "fg-sleepingdog-video-mount";
+    shell.className = "fg-sleepingdog-video-shell";
+    shell.setAttribute("aria-hidden", "true");
+
+    const pedestal = document.createElement("div");
+    pedestal.className = "fg-sleepingdog-pedestal";
+    pedestal.setAttribute("aria-hidden", "true");
+
+    const stage = document.createElement("div");
+    stage.className = "fg-sleepingdog-video-stage";
+
+    const video = document.createElement("video");
+    video.id = "fg-sleepingdog-video";
+    video.className = "fg-sleepingdog-video";
+    video.setAttribute("muted", "");
+    video.setAttribute("autoplay", "");
+    video.setAttribute("loop", "");
+    video.setAttribute("playsinline", "");
+    video.setAttribute("preload", "metadata");
+    video.setAttribute("disablePictureInPicture", "");
+    video.setAttribute("disableRemotePlayback", "");
+    video.muted = true;
+    stage.appendChild(video);
+    shell.appendChild(pedestal);
+    shell.appendChild(stage);
+
+    if (slot) {
+      slot.appendChild(shell);
+    } else {
+      overlayRoot.insertBefore(shell, overlayRoot.firstChild);
+    }
+
+    const allowed = getWebAccessibleAssets();
+    const candidates = SLEEPING_DOG_VIDEO_SOURCES.filter((s) => allowed.has(s.file));
+
+    const onVisibility = () => {
+      if (!video.isConnected) return;
+      const hidden = document.hidden;
+      video.style.animationPlayState = hidden ? "paused" : "running";
+      if (hidden) {
+        video.pause();
+      } else {
+        void video.play().catch(() => {});
+      }
+    };
+
+    let nextIndex = 0;
+    let onErr = null;
+    let onReady = null;
+
+    const detachAttemptListeners = () => {
+      if (onErr) {
+        video.removeEventListener("error", onErr);
+        onErr = null;
+      }
+      if (onReady) {
+        video.removeEventListener("loadeddata", onReady);
+        video.removeEventListener("canplay", onReady);
+        onReady = null;
+      }
+    };
+
+    const markReady = () => {
+      if (!root.isConnected) return;
+      root.classList.remove("fg-sleepingdog--video-failed");
+      root.classList.add("fg-sleepingdog--video-ready");
+      shell.classList.add("fg-sleepingdog--shell-ready");
+      if (errEl) errEl.hidden = true;
+    };
+
+    const markFailed = () => {
+      if (!root.isConnected) return;
+      root.classList.remove("fg-sleepingdog--video-ready");
+      shell.classList.remove("fg-sleepingdog--shell-ready");
+      root.classList.add("fg-sleepingdog--video-failed");
+      if (errEl) {
+        errEl.hidden = false;
+        errEl.textContent =
+          "No sleeping-dog video found. Add assets/sleeping-dog.mp4 (H.264), declare it in manifest.json, and reload.";
+      }
+    };
+
+    const tryNextSource = () => {
+      detachAttemptListeners();
+      if (nextIndex >= candidates.length) {
+        log("Sleeping dog: all video sources failed.");
+        markFailed();
+        return;
+      }
+      const spec = candidates[nextIndex];
+      nextIndex += 1;
+      log("Sleeping dog: loading", spec.file);
+
+      onReady = () => {
+        detachAttemptListeners();
+        markReady();
+      };
+      video.addEventListener("loadeddata", onReady, { once: true });
+      video.addEventListener("canplay", onReady, { once: true });
+
+      onErr = () => {
+        detachAttemptListeners();
+        log("Sleeping dog: error for", spec.file);
+        video.removeAttribute("src");
+        video.load();
+        tryNextSource();
+      };
+      video.addEventListener("error", onErr, { once: true });
+
+      video.src = chrome.runtime.getURL(spec.file);
+      video.load();
+      void video.play().catch(() => {});
+    };
+
+    if (!candidates.length) {
+      log("Sleeping dog: no video sources in manifest.");
+      shell.remove();
+      root.classList.remove("fg-sleepingdog--video-ready");
+      root.classList.add("fg-sleepingdog--video-failed");
+      if (errEl) {
+        errEl.hidden = false;
+        errEl.textContent =
+          "No sleeping-dog sources in manifest. Add assets/sleeping-dog.mp4 (and/or .webm) to web_accessible_resources.";
+      }
+      return () => {
+        root.classList.remove("fg-sleepingdog--video-ready", "fg-sleepingdog--video-failed");
+        overlayRoot.querySelector("#fg-sleepingdog-video-mount")?.remove();
+        if (errEl) {
+          errEl.hidden = true;
+          errEl.textContent = "";
+        }
+      };
+    }
+
+    document.addEventListener("visibilitychange", onVisibility);
+    tryNextSource();
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      detachAttemptListeners();
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      shell.remove();
+      root.classList.remove("fg-sleepingdog--video-ready", "fg-sleepingdog--video-failed");
+      if (errEl) {
+        errEl.hidden = true;
+        errEl.textContent = "";
+      }
+      nextIndex = 0;
+    };
+  }
+
+  /** Video-only premium break: no timer card, no visible chrome (Escape skips if allowed). */
+  function buildSleepingDogOverlay(allowSkip) {
+    const overlay = document.createElement("div");
+    overlay.id = "fg-overlay";
+    overlay.classList.add("fg-theme-sleepingdog");
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Focus break — sleeping dog");
+    overlay.setAttribute("tabindex", "-1");
+
+    const skipHint =
+      allowSkip
+        ? '<p class="fg-sr-only">Break in progress. Press Escape to skip this break.</p>'
+        : "";
+
+    const skipHud = allowSkip
+      ? `
+        <div class="fg-sleepingdog-glass fg-sleepingdog-skip-hint" role="status">
+          <span class="fg-sleepingdog-skip-hint__label">Press</span>
+          <kbd class="fg-sleepingdog-kbd" aria-hidden="true">Esc</kbd>
+          <span class="fg-sleepingdog-skip-hint__label">to skip</span>
+        </div>`
+      : "";
+
+    overlay.innerHTML = `
+      ${skipHint}
+      <div class="fg-sleepingdog-fallback" aria-hidden="true"></div>
+      <div class="fg-sleepingdog-dim" aria-hidden="true"></div>
+      <div id="fg-sleepingdog-video-slot" class="fg-sleepingdog-video-slot"></div>
+      <div class="fg-sleepingdog-atmosphere" aria-hidden="true"></div>
+      <div class="fg-sleepingdog-ui-stack">
+        ${skipHud}
+        <p id="fg-sleepingdog-error" class="fg-sleepingdog-error fg-sleepingdog-glass" role="status" hidden></p>
+      </div>
+    `;
+
+    return overlay;
+  }
+
   // ─── Overlay ─────────────────────────────────────────────────────────────────
 
   /** Premium “Breath in breath out” — full illustration (styles in overlay.css). */
@@ -526,6 +815,10 @@
   }
 
   function buildOverlay(endsAt, allowSkip, breakScreen) {
+    if (breakScreen === "sleepingdog") {
+      return buildSleepingDogOverlay(allowSkip);
+    }
+
     const overlay = document.createElement("div");
     overlay.id = "fg-overlay";
     overlay.classList.add(`fg-theme-${breakScreen || "default"}`);
@@ -839,6 +1132,22 @@
     // Show overlay immediately so it always captures hits (opacity 0 can let clicks through).
     overlayEl.classList.add("fg-visible");
 
+    if (activeBreakScreen === "sleepingdog") {
+      sleepingDogEscapeTeardown = registerSleepingDogEscapeHandler(allowSkip);
+      sleepingDogVideoTeardown = setupSleepingDogVideo(overlayEl);
+      requestAnimationFrame(() => {
+        try {
+          overlayEl.focus({ preventScroll: true });
+        } catch {
+          try {
+            overlayEl.focus();
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+    }
+
     freezePage();
     pausePageMedia();
     startCountdown(endsAt);
@@ -875,6 +1184,7 @@
     if (!overlayEl) return;
 
     teardownGiphySkipProximity();
+    teardownSleepingDogMedia();
 
     overlayEl.classList.remove("fg-visible");
     overlayEl.classList.add("fg-hiding");

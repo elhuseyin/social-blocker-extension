@@ -13,6 +13,19 @@ const PREMIUM_BREAK_SCREENS = new Set([
   "sleepingdog"
 ]);
 
+/** Known break themes only — never pass arbitrary storage strings into DOM/class names. */
+export const ALLOWED_BREAK_SCREENS = new Set([
+  "default",
+  "cat",
+  ...PREMIUM_BREAK_SCREENS
+]);
+
+export function sanitizeBreakScreenId(screen) {
+  const raw = typeof screen === "string" ? screen.trim() : "";
+  if (!raw || !ALLOWED_BREAK_SCREENS.has(raw)) return "default";
+  return raw;
+}
+
 /** One-time migration from legacy dev_mode key. */
 async function migrateLegacyDevMode() {
   const { dev_mode } = await chrome.storage.local.get("dev_mode");
@@ -44,8 +57,7 @@ export function isPremiumBreakScreen(screen) {
 
 export async function resolveBreakScreen(screen) {
   const { isSubscribed } = await getEntitlements();
-  let id = screen || "default";
-  if (id === "monkeys" || id === "crazydog") id = "default";
+  let id = sanitizeBreakScreenId(screen);
   if (isPremiumBreakScreen(id) && !isSubscribed) return "default";
   return id;
 }

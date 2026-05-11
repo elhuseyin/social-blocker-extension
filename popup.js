@@ -360,8 +360,8 @@ async function applySettingsToUI(settings) {
 function collectSettingsFromUI() {
   return {
     enabled:       els.toggleEnabled.checked,
-    breakInterval: parseInt(els.breakInterval.value, 10),
-    breakDuration: parseInt(els.breakDuration.value, 10),
+    breakInterval: Number(els.breakInterval.value),
+    breakDuration: Number(els.breakDuration.value),
     allowSkip:     els.toggleSkip.checked,
     breakScreen:   breakScreenDraft || "default",
     customDomains: currentSettings.customDomains || [],

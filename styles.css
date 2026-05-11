@@ -1029,13 +1029,6 @@ body {
   margin-bottom: 0;
 }
 
-.analytics-sub {
-  font-size: 11px;
-  color: var(--text-muted);
-  line-height: 1.45;
-  margin: 8px 0 10px;
-}
-
 .analytics-week-toggle {
   display: flex;
   width: 100%;

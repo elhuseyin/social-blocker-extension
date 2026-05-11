@@ -4,7 +4,7 @@
  * Runs as a Manifest V3 service worker (persistent via alarms).
  */
 
-import { getEntitlements, resolveBreakScreen } from "./entitlements.js";
+import { getEntitlements, resolveBreakScreen, sanitizeBreakScreenId } from "./entitlements.js";
 import { addSocialUsageMsForSpan, localDateKey, startOfLocalDayMs } from "./social-usage-daily-tracker.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -29,6 +29,48 @@ const BUILT_IN_DOMAINS = [
 function activeBuiltInDomains(settings) {
   const disabled = new Set(settings?.disabledBuiltIns || []);
   return BUILT_IN_DOMAINS.filter((d) => !disabled.has(d));
+}
+
+/** Minutes; `0.5` = 30 seconds (testing). */
+const ALLOWED_INTERVALS = new Set([0.5, 30, 60, 120]);
+const ALLOWED_DURATIONS = new Set([0.5, 5, 10, 15, 30, 60]);
+const BUILTIN_HOST_SET = new Set(BUILT_IN_DOMAINS);
+
+function isValidCustomDomain(s) {
+  if (typeof s !== "string") return false;
+  const d = s.trim().toLowerCase().replace(/^www\./, "");
+  if (!d || d.length > 253) return false;
+  return /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i.test(d);
+}
+
+/** Drop invalid fields from merged settings (storage tamper / bad messages). */
+function clampSettings(raw) {
+  const merged = { ...DEFAULT_SETTINGS, ...(raw && typeof raw === "object" ? raw : {}) };
+  const n = Number(merged.breakInterval);
+  merged.breakInterval = ALLOWED_INTERVALS.has(n) ? n : DEFAULT_SETTINGS.breakInterval;
+  const dur = Number(merged.breakDuration);
+  merged.breakDuration = ALLOWED_DURATIONS.has(dur) ? dur : DEFAULT_SETTINGS.breakDuration;
+  merged.enabled = Boolean(merged.enabled);
+  merged.allowSkip = Boolean(merged.allowSkip);
+  merged.breakScreen = sanitizeBreakScreenId(merged.breakScreen);
+  if (merged.breakScreenPending != null && merged.breakScreenPending !== "") {
+    merged.breakScreenPending = sanitizeBreakScreenId(merged.breakScreenPending);
+  } else {
+    delete merged.breakScreenPending;
+  }
+  const custom = Array.isArray(merged.customDomains) ? merged.customDomains : [];
+  merged.customDomains = [
+    ...new Set(
+      custom
+        .map((x) => String(x).trim().toLowerCase().replace(/^www\./, ""))
+        .filter(isValidCustomDomain)
+    )
+  ].slice(0, 50);
+  const dis = Array.isArray(merged.disabledBuiltIns) ? merged.disabledBuiltIns : [];
+  merged.disabledBuiltIns = [
+    ...new Set(dis.map((x) => String(x).trim().toLowerCase()).filter((h) => BUILTIN_HOST_SET.has(h)))
+  ];
+  return merged;
 }
 
 const TICK_INTERVAL_MS   = 1000;   // how often we update time (1s)
@@ -239,7 +281,7 @@ async function loadState() {
     "breakEndsAt",
     "breakStartedAt"
   ]);
-  state.settings    = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+  state.settings = clampSettings({ ...DEFAULT_SETTINGS, ...(data.settings || {}) });
   await normalizeBreakScreenInState();
   const todayKey = localDateKey();
   const persistedDayKey = data.usageDayKey;
@@ -581,7 +623,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "SETTINGS_UPDATED":
-        state.settings = { ...DEFAULT_SETTINGS, ...message.settings };
+        state.settings = clampSettings({ ...DEFAULT_SETTINGS, ...(message.settings || {}) });
         await normalizeBreakScreenInState();
         if (!state.settings.enabled) {
           await flushSocialSession(Date.now());
@@ -609,7 +651,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (changes.settings) {
-    state.settings = { ...DEFAULT_SETTINGS, ...changes.settings.newValue };
+    state.settings = clampSettings({ ...DEFAULT_SETTINGS, ...(changes.settings.newValue || {}) });
     log("Settings synced from storage:", state.settings);
     if (!state.settings.enabled) {
       void flushSocialSession(Date.now());
