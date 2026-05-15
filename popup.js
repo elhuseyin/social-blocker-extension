@@ -4,8 +4,9 @@
  * communicates with the background service worker.
  */
 
-import { getEntitlements, resolveBreakScreen } from "./entitlements.js";
+import { getEntitlements, resolveBreakScreenSync } from "./entitlements.js";
 import { getWeeklyUsageSummary } from "./usage-analytics.js";
+import { SOCIAL_USAGE_DAILY_KEY } from "./social-usage-daily-tracker.js";
 import { renderWeeklyUsageChart } from "./weekly-analytics-chart.js";
 import {
   ensureExtensionUserId,
@@ -16,6 +17,23 @@ import {
 } from "./billing-api.js";
 
 const LOG_PREFIX = "[FocusGuard Popup]";
+
+/** Perf marks: set `localStorage.focusguardPopupPerf = "1"` in the extension popup devtools, or `"0"` to silence. */
+const POPUP_PERF = typeof localStorage !== "undefined" && localStorage.getItem("focusguardPopupPerf") === "1";
+
+const perfT0 = typeof performance !== "undefined" ? performance.now() : 0;
+function perfMark(label) {
+  try {
+    if (typeof performance !== "undefined" && performance.mark) {
+      performance.mark(`fg_popup_${String(label).replace(/[^a-z0-9]+/gi, "_")}`);
+    }
+  } catch {
+    /* ignore */
+  }
+  if (!POPUP_PERF) return;
+  const t = typeof performance !== "undefined" ? performance.now() : Date.now();
+  console.log(LOG_PREFIX, "[perf]", label, `+${(t - perfT0).toFixed(1)}ms`);
+}
 
 const DEFAULT_SETTINGS = {
   enabled:       true,
@@ -29,14 +47,14 @@ const DEFAULT_SETTINGS = {
 
 /** Default blocked presets (same hostnames as background). Removing adds hostnames to `disabledBuiltIns`. */
 const BUILTIN_PRESETS = [
-  { id: "instagram", label: "instagram.com", icon: "📷", domains: ["instagram.com"] },
-  { id: "facebook", label: "facebook.com", icon: "👥", domains: ["facebook.com"] },
-  { id: "twitter", label: "x.com / twitter.com", icon: "𝕏", domains: ["twitter.com", "x.com"] }
+  { id: "instagram", label: "instagram.com", domains: ["instagram.com"] },
+  { id: "facebook", label: "facebook.com", domains: ["facebook.com"] },
+  { id: "twitter", label: "x.com / twitter.com", domains: ["twitter.com", "x.com"] }
 ];
 
 /** Break theme row thumb images (extension root paths). Cat is free; others premium. */
 const THEME_THUMB_IMAGE = {
-  cat: "assets/cat-stretch-logo.png",
+  cat: "assets/dump-cat-logo.png",
   night: "assets/dopamine-detox-logo.png",
   cooked: "assets/were-cooked-logo.png",
   forest: "assets/reset-mind-logo.png",
@@ -86,7 +104,6 @@ const els = {
   subscribeMonthlyBtn:      $("subscribe-monthly-btn"),
   promoInput:               $("promo-input"),
   promoRedeemBtn:           $("promo-redeem-btn"),
-  refreshPremiumBtn:        $("refresh-premium-btn"),
   manageSubscriptionBtn:    $("manage-subscription-btn"),
 
   saveBtn:           $("save-btn"),
@@ -158,9 +175,8 @@ function renderBuiltinPresets(settings) {
     const li = document.createElement("li");
     li.className = "domain-item domain-builtin";
     li.innerHTML = `
-        <span class="domain-favicon" aria-hidden="true">${preset.icon}</span>
         <span class="domain-text">${escapeHtml(preset.label)}</span>
-        <span class="domain-badge">built-in</span>
+        <span class="domain-badge">default</span>
         <button type="button" class="btn-remove btn-remove-builtin" data-builtin-id="${escapeHtml(preset.id)}" aria-label="Remove ${escapeHtml(preset.label)} from tracked sites" title="Remove">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
@@ -182,7 +198,6 @@ function renderCustomDomains(domains) {
     li.dataset.domain = domain;
 
     li.innerHTML = `
-        <span class="domain-favicon" aria-hidden="true">🌐</span>
         <span class="domain-text">${escapeHtml(domain)}</span>
         <button class="btn-remove" data-domain="${escapeHtml(domain)}" aria-label="Remove ${escapeHtml(domain)}" title="Remove">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -198,14 +213,6 @@ function escapeHtml(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function domainIcon(domain) {
-  if (domain.includes("instagram")) return "📷";
-  if (domain.includes("facebook")) return "👥";
-  if (domain.includes("twitter") || domain.includes("x.com")) return "𝕏";
-  if (domain.includes("youtube")) return "📺";
-  return "🌐";
-}
-
 // ─── State / Storage ──────────────────────────────────────────────────────
 
 let currentSettings = { ...DEFAULT_SETTINGS };
@@ -216,6 +223,12 @@ let entitlementsCache = { isSubscribed: false, devMode: false, stripeSubscribed:
 
 let weeklyChartTeardown = null;
 let analyticsWeekOffset = 0;
+
+/** Avoids full DOM refresh when GET_STATUS payload unchanged (timer polls). */
+let lastStatusSignature = "";
+
+/** Skip rebuilding site list HTML when usage snapshot unchanged. */
+let lastSiteUsageSig = "";
 
 function isPremiumUnlocked() {
   return entitlementsCache.isSubscribed;
@@ -290,22 +303,14 @@ function updateBillingFooterVisibility() {
   }
 }
 
-async function refreshEntitlementsUI(options = {}) {
-  if (!options.skipBillingSync) {
-    try {
-      await ensureExtensionUserId();
-      await syncPremiumFromServer();
-    } catch (err) {
-      log("Billing sync failed (offline or misconfigured API):", err?.message || err);
-    }
-  }
-
+async function refreshEntitlementsFromStorage() {
   const { isSubscribed, devMode, stripeSubscribed } = await getEntitlements();
   entitlementsCache = { isSubscribed, devMode, stripeSubscribed };
   applyPremiumThemeState();
   updateBillingFooterVisibility();
-  breakScreenDraft = await resolveBreakScreen(
-    currentSettings.breakScreenPending ?? currentSettings.breakScreen
+  breakScreenDraft = resolveBreakScreenSync(
+    currentSettings.breakScreenPending ?? currentSettings.breakScreen,
+    isSubscribed
   );
   setSelectedBreakTheme(breakScreenDraft);
   log("Entitlements:", entitlementsCache);
@@ -320,39 +325,69 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (changes.settings) {
     currentSettings = { ...DEFAULT_SETTINGS, ...changes.settings.newValue };
-    void applySettingsToUI(currentSettings);
+    applySettingsToUI(currentSettings);
   }
-  if (changes.devMode || changes.subscribed || changes.dev_mode || changes.settings) {
-    void refreshEntitlementsUI();
+  if (changes.devMode || changes.subscribed || changes.dev_mode) {
+    void refreshEntitlementsFromStorage();
   }
   if (changes.socialUsageDaily && isPremiumUnlocked()) {
     void refreshWeeklyAnalytics();
   }
 });
 
-async function loadSettings() {
-  const data = await chrome.storage.local.get("settings");
-  currentSettings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
-  const resolved = await resolveBreakScreen(currentSettings.breakScreen);
-  if (resolved !== currentSettings.breakScreen) {
-    currentSettings = { ...currentSettings, breakScreen: resolved };
-    await chrome.storage.local.set({
-      settings: { ...(data.settings || {}), breakScreen: resolved }
-    });
+/**
+ * Single batched storage read + UI hydrate (no network).
+ * Migrates legacy `dev_mode` when present in the batch payload.
+ */
+async function hydrateFromStorage() {
+  const data = await chrome.storage.local.get([
+    "settings",
+    "subscribed",
+    "devMode",
+    "dev_mode",
+    SOCIAL_USAGE_DAILY_KEY
+  ]);
+
+  if (data.dev_mode === true) {
+    await chrome.storage.local.set({ devMode: true, dev_mode: false });
+    data.devMode = true;
   }
-  await applySettingsToUI(currentSettings);
+
+  entitlementsCache = {
+    isSubscribed: Boolean(data.subscribed) || Boolean(data.devMode),
+    devMode: Boolean(data.devMode),
+    stripeSubscribed: Boolean(data.subscribed)
+  };
+
+  currentSettings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+  const resolvedMain = resolveBreakScreenSync(currentSettings.breakScreen, entitlementsCache.isSubscribed);
+  if (resolvedMain !== currentSettings.breakScreen) {
+    currentSettings = { ...currentSettings, breakScreen: resolvedMain };
+    await chrome.storage.local.set({ settings: currentSettings });
+  }
+
+  breakScreenDraft = resolveBreakScreenSync(
+    currentSettings.breakScreenPending ?? currentSettings.breakScreen,
+    entitlementsCache.isSubscribed
+  );
+
+  applySettingsToUI(currentSettings);
+  applyPremiumThemeState();
+  updateBillingFooterVisibility();
+  await refreshWeeklyAnalytics(data[SOCIAL_USAGE_DAILY_KEY]);
   log("Settings loaded:", currentSettings);
 }
 
-async function applySettingsToUI(settings) {
+function applySettingsToUI(settings) {
   els.toggleEnabled.checked  = settings.enabled;
   els.breakInterval.value    = String(settings.breakInterval);
   els.breakDuration.value    = String(settings.breakDuration);
   els.toggleSkip.checked     = settings.allowSkip;
   renderBuiltinPresets(settings);
   renderCustomDomains(settings.customDomains || []);
-  breakScreenDraft = await resolveBreakScreen(
-    settings.breakScreenPending ?? settings.breakScreen
+  breakScreenDraft = resolveBreakScreenSync(
+    settings.breakScreenPending ?? settings.breakScreen,
+    entitlementsCache.isSubscribed
   );
   setSelectedBreakTheme(breakScreenDraft);
 }
@@ -395,7 +430,7 @@ async function saveSettings() {
   }
   const breakActive = Boolean(status?.breakActive);
 
-  const resolvedDraft = await resolveBreakScreen(breakScreenDraft);
+  const resolvedDraft = resolveBreakScreenSync(breakScreenDraft, entitlementsCache.isSubscribed);
   const base = collectSettingsFromUI();
 
   if (breakActive) {
@@ -429,12 +464,38 @@ async function saveSettings() {
 
 // ─── Status / Usage UI ───────────────────────────────────────────────────
 
+function statusPayloadSignature(s) {
+  if (!s) return "";
+  return JSON.stringify({
+    breakActive: s.breakActive,
+    breakEndsAt: s.breakEndsAt,
+    usage: s.usage,
+    enabled: s.settings?.enabled,
+    activeDomain: s.activeDomain,
+    breakInterval: s.settings?.breakInterval
+  });
+}
+
 async function fetchStatus() {
   try {
-    currentStatus = await chrome.runtime.sendMessage({ type: "GET_STATUS" });
+    const next = await chrome.runtime.sendMessage({ type: "GET_STATUS" });
+    const sig = statusPayloadSignature(next);
+
+    if (sig === lastStatusSignature && currentStatus) {
+      if (next?.breakActive && next?.breakEndsAt) {
+        const remaining = Math.max(0, next.breakEndsAt - Date.now());
+        els.statusText.textContent = `Break active — ${formatMs(remaining)} remaining`;
+      }
+      return;
+    }
+
+    lastStatusSignature = sig;
+    currentStatus = next;
+    els.statusBar?.classList.remove("status-bar--pending");
     updateStatusUI();
   } catch (err) {
     log("Status fetch error:", err);
+    els.statusBar?.classList.remove("status-bar--pending");
     els.statusText.textContent = "Extension inactive";
     els.statusDot.className    = "status-dot dot-inactive";
   }
@@ -485,19 +546,20 @@ function setAnalyticsWeekToggleUI() {
   els.analyticsWeekLast.classList.toggle("analytics-seg--active", analyticsWeekOffset === 1);
 }
 
-async function refreshWeeklyAnalytics() {
+async function refreshWeeklyAnalytics(prefetchedSocialUsageDaily) {
   if (!els.analyticsCanvas || !els.analyticsInner || !els.analyticsGate) return;
 
   const unlocked = isPremiumUnlocked();
   els.analyticsGate.hidden = unlocked;
   els.analyticsInner.classList.toggle("analytics-chart-inner--locked", !unlocked);
+  els.analyticsInner.classList.remove("analytics-chart-inner--skeleton");
 
   if (weeklyChartTeardown) {
     weeklyChartTeardown();
     weeklyChartTeardown = null;
   }
 
-  const s = await getWeeklyUsageSummary(analyticsWeekOffset);
+  const s = await getWeeklyUsageSummary(analyticsWeekOffset, prefetchedSocialUsageDaily);
   const byDay = s.byDay;
 
   weeklyChartTeardown = renderWeeklyUsageChart(els.analyticsCanvas, byDay, {
@@ -520,17 +582,23 @@ function renderSiteUsageList(usage, intervalMs) {
     .filter(([, ms]) => ms >= 1000)
     .sort((a, b) => b[1] - a[1]);
 
+  const sig = entries.map(([d, ms]) => `${d}:${Math.round(ms / 1000)}`).join("|");
+
   if (!entries.length) {
+    if (lastSiteUsageSig === "__empty__") return;
+    lastSiteUsageSig = "__empty__";
     els.siteUsageList.innerHTML = `<li class="site-usage-empty">Start tracking sites</li>`;
     return;
   }
+
+  if (sig === lastSiteUsageSig) return;
+  lastSiteUsageSig = sig;
 
   els.siteUsageList.innerHTML = entries.map(([domain, ms]) => {
     const pct = Math.min(100, (ms / intervalMs) * 100);
     const barClass = pct >= 90 ? "is-danger" : pct >= 60 ? "is-warn" : "is-ok";
     return `
         <li class="site-usage-item">
-          <span class="site-usage-icon" aria-hidden="true">${domainIcon(domain)}</span>
           <span class="site-usage-domain">${escapeHtml(domain)}</span>
           <div class="site-usage-track" aria-hidden="true">
             <div class="site-usage-fill ${barClass}" style="width:${pct}%"></div>
@@ -728,28 +796,8 @@ if (els.promoRedeemBtn && els.promoInput) {
     }
     els.promoInput.value = "";
     showSaveStatus("Premium unlocked.");
-    await refreshEntitlementsUI();
+    await refreshEntitlementsFromStorage();
   });
-}
-
-async function manualRefreshPremium() {
-  showSaveStatus("Syncing…");
-  const r = await syncPremiumFromServer();
-  if (r.skipped) {
-    await refreshEntitlementsUI({ skipBillingSync: true });
-    showSaveStatus("Premium (dev mode).");
-    return;
-  }
-  if (r.error === "network" || (r.error && String(r.error).startsWith("http_"))) {
-    showSaveStatus("Could not reach billing server.", true);
-    return;
-  }
-  await refreshEntitlementsUI({ skipBillingSync: true });
-  showSaveStatus(isPremiumUnlocked() ? "Premium active." : "No active subscription found.");
-}
-
-if (els.refreshPremiumBtn) {
-  els.refreshPremiumBtn.addEventListener("click", () => void manualRefreshPremium());
 }
 
 if (els.manageSubscriptionBtn) {
@@ -779,16 +827,66 @@ if (els.analyticsWeekThis && els.analyticsWeekLast) {
   });
 }
 
+function paintInstantShell() {
+  entitlementsCache = { isSubscribed: false, devMode: false, stripeSubscribed: false };
+  currentSettings = { ...DEFAULT_SETTINGS };
+  applySettingsToUI(currentSettings);
+  applyPremiumThemeState();
+  if (els.billingSectionNotPremium) els.billingSectionNotPremium.hidden = true;
+  if (els.billingSectionPremium) els.billingSectionPremium.hidden = true;
+  els.statusBar?.classList.add("status-bar--pending");
+  els.statusText.textContent = "Connecting…";
+  els.statusDot.className = "status-dot dot-idle";
+  els.analyticsInner?.classList.add("analytics-chart-inner--skeleton");
+}
+
+function scheduleDeferredBillingSync() {
+  const run = async () => {
+    perfMark("billing_network_start");
+    try {
+      await ensureExtensionUserId();
+      await syncPremiumFromServer();
+    } catch (err) {
+      log("Deferred billing sync:", err?.message || err);
+    }
+    await refreshEntitlementsFromStorage();
+    lastStatusSignature = "";
+    await fetchStatus();
+    perfMark("full_interactive_after_network");
+  };
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(() => void run(), { timeout: 5000 });
+  } else {
+    setTimeout(() => void run(), 400);
+  }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────
 
 async function init() {
-  await loadSettings();
+  perfMark("popup_open");
+  paintInstantShell();
   setAnalyticsWeekToggleUI();
-  await refreshEntitlementsUI();
-  await fetchStatus();
+  perfMark("instant_shell_complete");
 
-  // Poll status every 2s while popup is open
-  setInterval(fetchStatus, 2000);
+  requestAnimationFrame(() => perfMark("first_frame"));
+
+  try {
+    await hydrateFromStorage();
+    perfMark("storage_hydrated");
+  } catch (e) {
+    log("hydrateFromStorage:", e);
+  } finally {
+    updateBillingFooterVisibility();
+  }
+
+  await fetchStatus();
+  perfMark("status_first_ready");
+
+  setInterval(() => void fetchStatus(), 2000);
+
+  perfMark("interactive_local");
+  scheduleDeferredBillingSync();
 }
 
 void init();

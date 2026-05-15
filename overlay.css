@@ -126,37 +126,6 @@
   color: rgba(255, 232, 214, 0.62);
 }
 
-/* Cat stretch — static logo above CSS cat animation */
-#fg-overlay.fg-theme-cat #fg-animation-container.fg-cat-wrap.fg-cat-wrap--with-logo {
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  width: 100%;
-  max-width: 280px;
-  height: auto;
-  min-height: 0;
-}
-
-.fg-cat-logo-wrap {
-  flex-shrink: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.fg-cat-logo {
-  width: min(112px, 28vw);
-  max-width: 112px;
-  height: auto;
-  display: block;
-  object-fit: contain;
-  border-radius: 20px;
-  box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(255, 255, 255, 0.08) inset;
-}
-
 .fg-theme-forest #fg-panel {
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.04) inset,
@@ -350,37 +319,49 @@
   width: 100%;
 }
 
-.fg-breath-wrap--art-only {
+/* Logo (same asset as popup thumb) + breathing orb — illustration is not full-bleed hero */
+.fg-breath-wrap--logo-and-orb {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 20px;
 }
 
-.fg-breath-art-wrap {
-  width: 100%;
+.fg-breath-logo-wrap {
+  flex-shrink: 0;
   display: flex;
   justify-content: center;
+  width: 100%;
 }
 
-.fg-breath-art {
-  width: 100%;
-  max-width: min(340px, 90vw);
+.fg-breath-logo {
+  width: min(112px, 30vw);
+  max-width: 112px;
   height: auto;
   display: block;
   object-fit: contain;
-  border-radius: 14px;
-  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.fg-breath-orb-wrap {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .fg-theme-breath #fg-animation-container.fg-breath-wrap {
   width: 100%;
-  max-width: min(340px, 88vw);
+  max-width: min(280px, 88vw);
   height: auto;
   min-height: 0;
 }
 
-.fg-theme-breath #fg-animation-container.fg-breath-wrap.fg-breath-wrap--art-only {
-  max-width: min(400px, 94vw);
+.fg-theme-breath #fg-animation-container.fg-breath-wrap.fg-breath-wrap--logo-and-orb {
+  max-width: min(320px, 92vw);
 }
 
 .fg-theme-breath .fg-breath-svg {
@@ -622,14 +603,7 @@
   border-color: rgba(253, 186, 116, 0.55);
 }
 
-.fg-mycat-wrap {
-  width: 100%;
-  max-width: 420px;
-  align-self: center;
-  min-height: 0;
-}
-
-/* Screen-reader-only hint (Escape to skip) */
+/* Screen-reader-only (Escape hint on video-only My cat break) */
 #fg-overlay .fg-sr-only {
   position: absolute;
   width: 1px;
@@ -643,299 +617,230 @@
 }
 
 /*
- * Sleeping dog — stack (bottom → top, all inside #fg-overlay; no mix-blend on video = solid dog):
- *   fallback (load) → dim (page darken, lighter center) → video + pedestal glow → edge vignette → glass UI
+ * My cat — dimmed page + modal card with explicit size (fixes collapsed flex / 80×80 container).
+ * Video: object-fit cover, GPU layer, opacity 1.
  */
-
-#fg-overlay.fg-theme-sleepingdog {
-  display: block;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  isolation: isolate;
-}
-
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-fallback {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: linear-gradient(155deg, rgba(26, 16, 40, 0.94) 0%, rgba(10, 8, 16, 0.92) 50%, rgba(18, 12, 28, 0.94) 100%);
-  opacity: 1;
-  transition: opacity 0.65s ease-out, visibility 0s linear 0.65s;
-  pointer-events: none;
-}
-
-#fg-overlay.fg-theme-sleepingdog.fg-sleepingdog--video-ready .fg-sleepingdog-fallback {
-  opacity: 0;
-  visibility: hidden;
-}
-
-/* Darken page behind break — weaker than flat black; center stays lighter for the dog */
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-dim {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.55s ease-out;
-  background:
-    radial-gradient(
-      ellipse 88% 78% at 50% 48%,
-      rgba(0, 0, 0, 0.14) 0%,
-      rgba(0, 0, 0, 0.32) 52%,
-      rgba(4, 2, 12, 0.52) 100%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(0, 0, 0, 0.28) 0%,
-      rgba(0, 0, 0, 0.1) 42%,
-      rgba(0, 0, 0, 0.36) 100%
-    );
-}
-
-#fg-overlay.fg-theme-sleepingdog.fg-sleepingdog--video-ready .fg-sleepingdog-dim {
-  opacity: 1;
-}
-
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-video-slot {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-}
-
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-atmosphere {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.55s ease-out;
-  /* Edge-only vignette — transparent center so the dog stays vivid */
-  background: radial-gradient(
-    ellipse 100% 95% at 50% 50%,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0) 58%,
-    rgba(0, 0, 0, 0.18) 82%,
-    rgba(0, 0, 0, 0.32) 100%
-  );
-}
-
-#fg-overlay.fg-theme-sleepingdog.fg-sleepingdog--video-ready .fg-sleepingdog-atmosphere {
-  opacity: 1;
-}
-
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-ui-stack {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
+#fg-overlay.fg-theme-mycat.fg-theme-mycat--video-only {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  padding: 24px 20px max(24px, env(safe-area-inset-bottom));
-  pointer-events: none;
-  gap: 12px;
+  justify-content: center;
+  padding: clamp(12px, 4vmin, 28px);
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* Lighter scrim so the break never reads as a flat black screen */
+  background: rgba(28, 24, 40, 0.52);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-glass {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  background: rgba(12, 10, 22, 0.58);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
-    0 8px 28px rgba(0, 0, 0, 0.35),
-    0 20px 56px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
-}
-
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-skip-hint {
-  display: inline-flex;
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-viewport {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 11px 18px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.88);
+  justify-content: center;
+  width: 100%;
+  flex: 0 1 auto;
 }
 
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-skip-hint__label {
-  opacity: 0.85;
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-modal {
+  width: min(92vw, 720px);
+  height: min(78vh, 640px);
+  min-height: 280px;
+  max-height: min(85vh, 720px);
+  border-radius: 20px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #1a1724 0%, #121018 100%);
+  display: flex;
+  flex-direction: column;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 24px 80px rgba(0, 0, 0, 0.65),
+    0 0 60px rgba(244, 114, 182, 0.08);
 }
 
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-kbd {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  font-family: inherit;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.95);
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
-}
-
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-error {
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-media {
   position: relative;
-  left: auto;
-  bottom: auto;
-  transform: none;
-  max-width: min(420px, calc(100% - 32px));
-  margin: 0;
-  padding: 14px 18px;
-  border-radius: 16px;
-  font-size: 13px;
-  line-height: 1.45;
-  text-align: center;
-  color: rgba(255, 250, 255, 0.94);
-  border-color: rgba(196, 181, 253, 0.35);
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-error[hidden] {
-  display: none !important;
-}
-
-#fg-overlay.fg-theme-sleepingdog #fg-sleepingdog-video-mount.fg-sleepingdog-video-shell {
+/* Centered copy + skip over the clip (clicks pass through except Skip) */
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-copy {
   position: absolute;
   inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(20px, 5vw, 40px);
+  text-align: center;
   pointer-events: none;
-}
-
-/* Soft pool of light behind the dog — separation from page without touching video opacity */
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-pedestal {
-  position: absolute;
-  left: 50%;
-  bottom: clamp(20px, 7vh, 96px);
-  width: min(96vw, 640px);
-  height: min(52vh, 520px);
-  transform: translateX(-50%);
-  pointer-events: none;
-  z-index: 0;
-  background: radial-gradient(
-    ellipse 72% 70% at 50% 100%,
-    rgba(139, 92, 246, 0.2) 0%,
-    rgba(30, 20, 50, 0.35) 45%,
-    rgba(0, 0, 0, 0) 72%
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.42) 0%,
+    rgba(0, 0, 0, 0.12) 38%,
+    rgba(0, 0, 0, 0.38) 100%
   );
 }
 
-#fg-overlay.fg-theme-sleepingdog .fg-sleepingdog-video-stage {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  transform: translateZ(0);
-  z-index: 1;
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-copy-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 28rem;
+  pointer-events: none;
 }
 
-/* ~½ size, bottom-anchored; Ken Burns = transform only */
-@keyframes fg-sleepingdog-kenburns {
-  0% {
-    transform: translateX(-50%) translateZ(0) scale(0.5) translate3d(0, 0, 0);
-  }
-  50% {
-    transform: translateX(-50%) translateZ(0) scale(0.53) translate3d(-0.8%, -0.45%, 0);
-  }
-  100% {
-    transform: translateX(-50%) translateZ(0) scale(0.5) translate3d(0, 0, 0);
-  }
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-copy #fg-eyebrow {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
 }
 
-#fg-overlay.fg-theme-sleepingdog #fg-sleepingdog-video {
-  position: absolute;
-  inset: auto;
-  left: 50%;
-  right: auto;
-  top: auto;
-  bottom: clamp(36px, 10vh, 120px);
-  width: 100vw;
-  height: 100vh;
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-copy #fg-headline {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(32px, 7vw, 44px);
+  font-weight: 400;
+  line-height: 1.12;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  text-shadow: 0 2px 28px rgba(0, 0, 0, 0.5);
+}
+
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-copy #fg-subtext {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 16px rgba(0, 0, 0, 0.45);
+}
+
+/* Countdown — same structure as other themes; sized for modal copy column */
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-copy #fg-timer-wrapper {
+  margin-top: 4px;
+  pointer-events: none;
+}
+
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-copy #fg-timer-label {
+  color: rgba(255, 255, 255, 0.55);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+}
+
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-copy #fg-countdown {
+  font-size: clamp(40px, 10vw, 64px);
+  color: #ffffff;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.55);
+}
+
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-copy #fg-skip-btn {
+  margin-top: 8px;
+  pointer-events: auto;
+  border-color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-copy #fg-skip-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.65);
+  color: #ffffff;
+}
+
+/* Override global #fg-animation-container 80×80 — needs higher specificity than single-id rule */
+#fg-overlay.fg-theme-mycat--video-only #fg-animation-container.fg-mycat-wrap {
+  position: relative;
+  z-index: 0;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   max-width: none;
   max-height: none;
-  object-fit: cover;
-  object-position: center 58%;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  border: none;
-  outline: none;
-  /* Solid pixels (no mix-blend). Grade + edge separation — single composited layer */
-  filter:
-    brightness(1.16)
-    contrast(1.14)
-    saturate(1.22)
-    drop-shadow(0 0 1px rgba(255, 255, 255, 0.35))
-    drop-shadow(0 0 28px rgba(255, 255, 255, 0.12))
-    drop-shadow(0 16px 48px rgba(0, 0, 0, 0.55));
-  transform: translateX(-50%) translateZ(0) scale(0.5);
-  transform-origin: 50% 100%;
-  animation: fg-sleepingdog-kenburns 72s ease-in-out infinite;
-  transition: opacity 0.45s ease-out, visibility 0s linear 0.45s;
-  will-change: transform;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
 }
 
-#fg-overlay.fg-theme-sleepingdog #fg-sleepingdog-video-mount.fg-sleepingdog--shell-ready #fg-sleepingdog-video {
+#fg-overlay.fg-theme-mycat--video-only #fg-mycat-slot {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 0;
+  background: linear-gradient(165deg, #1c1828 0%, #12101a 100%);
+}
+
+#fg-overlay.fg-theme-mycat--video-only #fg-mycat-slot.fg-mycat-slot--video {
+  overflow: hidden;
+}
+
+/* Embedded extension player (avoids host-page media CSP blocking chrome-extension:// video) */
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(165deg, #1f1a28 0%, #14121a 100%);
   opacity: 1;
   visibility: visible;
-  transition: opacity 0.45s ease-out, visibility 0s linear 0s;
+  transform: translateZ(0);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  #fg-overlay.fg-theme-sleepingdog #fg-sleepingdog-video {
-    animation: none;
-    transform: translateX(-50%) translateZ(0) scale(0.5);
-    filter:
-      brightness(1.12)
-      contrast(1.1)
-      saturate(1.16)
-      drop-shadow(0 0 1px rgba(255, 255, 255, 0.3))
-      drop-shadow(0 12px 36px rgba(0, 0, 0, 0.5));
-    will-change: auto;
-  }
-}
-
-/* My cat — premium placeholder */
-.fg-theme-mycat #fg-panel {
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-    0 40px 80px rgba(0, 0, 0, 0.62),
-    0 0 120px rgba(244, 114, 182, 0.12);
-}
-
-.fg-theme-mycat #fg-eyebrow {
-  color: rgba(251, 207, 232, 0.8);
-}
-
-.fg-theme-mycat #fg-headline {
-  color: #fce7f3;
-}
-
-.fg-theme-mycat #fg-content {
-  gap: 16px;
-}
-
-#fg-mycat-slot {
-  min-height: 140px;
+#fg-overlay.fg-theme-mycat--video-only .fg-mycat-error {
+  margin: 0;
+  padding: 24px 28px;
+  max-width: min(420px, 92vw);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+  color: rgba(252, 231, 243, 0.92);
+  background: rgba(30, 20, 40, 0.85);
+  border: 1px solid rgba(244, 114, 182, 0.35);
   border-radius: 16px;
-  border: 1px dashed rgba(244, 114, 182, 0.35);
-  background: rgba(244, 114, 182, 0.06);
 }
 
-/* Cat stretch: centers pure CSS cat from cat-animation.css */
+/* Dump Cat — hero logo (text-free art) + CSS cat from cat-animation.css */
 .fg-cat-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
+}
+
+.fg-dump-cat-logo-wrap {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.fg-dump-cat-logo {
+  width: min(200px, 58vw);
+  max-width: 200px;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  border-radius: 14px;
 }
 
 .fg-theme-cat #fg-animation-container.fg-cat-wrap {

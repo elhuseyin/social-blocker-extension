@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Focus Guard</title>
+  <!-- No remote stylesheets or inline event handlers: MV3 extension CSP disallows
+       inline handlers; Chrome Web Store disfavors remotely loaded code/CSS. -->
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -29,9 +31,9 @@
   </header>
 
   <!-- ── Status bar ───────────────────────────────────────────────────────── -->
-  <div class="status-bar" id="status-bar">
+  <div class="status-bar status-bar--pending" id="status-bar">
     <span class="status-dot" id="status-dot"></span>
-    <span id="status-text">Loading…</span>
+    <span id="status-text">Connecting…</span>
   </div>
 
   <!-- ── Scrollable content ───────────────────────────────────────────────── -->
@@ -109,7 +111,7 @@
         <button class="theme-item" type="button" data-theme="cat">
           <span class="theme-thumb theme-thumb--cat" aria-hidden="true"></span>
           <span class="theme-meta">
-            <span class="theme-title">Cat stretch animation</span>
+            <span class="theme-title">Dump Cat</span>
             <span class="theme-subtitle">Free</span>
           </span>
           <span class="theme-state">Select</span>
@@ -228,25 +230,6 @@
           </span>
           <span class="theme-state">Locked</span>
         </button>
-
-        <button class="theme-item theme-item--locked" type="button" data-theme="sleepingdog" data-locked="true">
-          <span class="theme-thumb theme-thumb--locked" aria-hidden="true">
-            <span class="fg-premium-lock">
-              <span class="fg-premium-lock__shackle"></span>
-              <span class="fg-premium-lock__body">
-                <span class="fg-premium-lock__keyhole">
-                  <span class="fg-premium-lock__keyhole-circle"></span>
-                  <span class="fg-premium-lock__keyhole-slot"></span>
-                </span>
-              </span>
-            </span>
-          </span>
-          <span class="theme-meta">
-            <span class="theme-title">Sleeping dog</span>
-            <span class="theme-subtitle">Premium</span>
-          </span>
-          <span class="theme-state">Locked</span>
-        </button>
       </div>
     </section>
 
@@ -318,9 +301,9 @@
   <footer class="popup-footer">
     <!-- hidden until entitlements load — avoids subscribe UI flash for premium users -->
     <div id="billing-section-not-premium" hidden>
-      <div class="subscribe-copy">Unlock premium break screens &amp; weekly insights</div>
-      <div class="billing-actions" role="group" aria-label="Subscribe">
-        <button type="button" class="btn-subscribe" id="subscribe-monthly-btn">Subscribe</button>
+      <div class="subscribe-copy">Unlock Premium features</div>
+      <div class="billing-actions" role="group" aria-label="Try Pro subscription">
+        <button type="button" class="btn-subscribe" id="subscribe-monthly-btn">Try Pro — Only 8.99$</button>
       </div>
       <div class="promo-row">
         <input
@@ -334,7 +317,6 @@
         />
         <button type="button" class="btn btn-primary btn-compact" id="promo-redeem-btn">Redeem</button>
       </div>
-      <button type="button" class="btn-billing-refresh" id="refresh-premium-btn">Refresh premium status</button>
     </div>
     <div id="billing-section-premium" hidden>
       <button

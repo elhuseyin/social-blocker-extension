@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title></title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      /* Never flat black while loading or on error */
+      background: linear-gradient(165deg, #1f1a28 0%, #14121a 45%, #0e0c12 100%);
+    }
+    #fg-mycat-fallback-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      z-index: 0;
+      display: block;
+      opacity: 1;
+      visibility: visible;
+      pointer-events: none;
+    }
+    video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+      opacity: 1;
+      visibility: visible;
+      transform: translateZ(0);
+    }
+    /* Until video is playing: show branded fallback, keep video in DOM for decoding */
+    body.fg-mycat-loading video {
+      opacity: 0;
+      visibility: hidden;
+    }
+    body.fg-mycat-loading #fg-mycat-fallback-img {
+      opacity: 1;
+    }
+    body.fg-mycat-has-video #fg-mycat-fallback-img {
+      opacity: 0;
+      transition: opacity 0.35s ease;
+    }
+    body.fg-mycat-fallback-only video {
+      display: none;
+    }
+    body.fg-mycat-fallback-only #fg-mycat-fallback-img {
+      opacity: 1;
+    }
+    #fg-mycat-fail {
+      display: none;
+      position: absolute;
+      left: 50%;
+      bottom: 12px;
+      transform: translateX(-50%);
+      z-index: 2;
+      margin: 0;
+      padding: 10px 14px;
+      max-width: calc(100% - 24px);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      font-size: 12px;
+      line-height: 1.45;
+      text-align: center;
+      color: rgba(252, 231, 243, 0.95);
+      background: rgba(20, 16, 32, 0.88);
+      border: 1px solid rgba(244, 114, 182, 0.35);
+      border-radius: 12px;
+    }
+    body.fg-mycat-fallback-only #fg-mycat-fail {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <img id="fg-mycat-fallback-img" width="640" height="640" decoding="async" />
+  <video
+    id="fg-mycat-embed-video"
+    muted
+    playsinline
+    webkit-playsinline
+    loop
+    autoplay
+    preload="auto"
+    disablepictureinpicture
+    disableremoteplayback
+  ></video>
+  <p id="fg-mycat-fail" role="status"></p>
+  <script src="mycat-player.js"></script>
+</body>
+</html>

@@ -51,17 +51,10 @@
   /** Tear down GIPHY reaction on Skip (Dopamine detox) before removing overlay. */
   let giphySkipProximityTeardown = null;
 
-  /** Fullscreen break video (Sleeping dog) — pause/unload + visibility listener cleanup. */
-  let sleepingDogVideoTeardown = null;
-
-  /**
-   * Escape-to-skip for video-only break theme. Registered with capture:true before freezePage()
-   * so we still receive Escape when focus is on the frozen page.
-   */
-  let sleepingDogEscapeTeardown = null;
-
-  /** Mirrors injectOverlay allowSkip for the Escape handler. */
-  let sleepingDogAllowSkip = false;
+  /** My cat theme — fullscreen video + Escape skip teardown. */
+  let mycatVideoTeardown = null;
+  let mycatEscapeTeardown = null;
+  let mycatAllowSkip = false;
 
   // ─── Skip-button hover reaction GIF (night / Dopamine detox only) ───────────
 
@@ -350,10 +343,8 @@
     return screen != null && Object.prototype.hasOwnProperty.call(QUOTES_BY_BREAK_SCREEN, screen);
   }
 
-  /** Premium screens with an empty slot for future content (see overlay.css per theme). */
-  const PREMIUM_PLACEHOLDER_THEMES = {
-    mycat: { wrapClass: "fg-mycat-wrap", slotId: "fg-mycat-slot", headline: "My cat" }
-  };
+  /** Premium screens with a custom slot (see overlay.css per theme). */
+  const PREMIUM_PLACEHOLDER_THEMES = {};
 
   function getPremiumPlaceholderTheme(screen) {
     return PREMIUM_PLACEHOLDER_THEMES[screen] || null;
@@ -522,16 +513,6 @@
     }
   }
 
-  /**
-   * Add `assets/sleeping-dog.mp4` (and optionally `.webm` / `.mov`) plus matching manifest
-   * `web_accessible_resources` entries when you ship a clip. Order: MP4 → WebM → MOV.
-   */
-  const SLEEPING_DOG_VIDEO_SOURCES = [
-    { file: "assets/sleeping-dog.mp4", type: 'video/mp4; codecs="avc1.4D401E"' },
-    { file: "assets/sleeping-dog.webm", type: "video/webm" },
-    { file: "assets/sleeping-dog.mov", type: "video/quicktime" }
-  ];
-
   let webAccessibleAssetsCache = null;
   function getWebAccessibleAssets() {
     if (webAccessibleAssetsCache) return webAccessibleAssetsCache;
@@ -554,39 +535,39 @@
     return set;
   }
 
-  function teardownSleepingDogMedia() {
-    if (typeof sleepingDogVideoTeardown === "function") {
+  function teardownMycatMedia() {
+    if (typeof mycatVideoTeardown === "function") {
       try {
-        sleepingDogVideoTeardown();
+        mycatVideoTeardown();
       } catch (e) {
-        log("Sleeping dog video teardown error:", e);
+        log("My cat video teardown error:", e);
       }
     }
-    sleepingDogVideoTeardown = null;
-    if (typeof sleepingDogEscapeTeardown === "function") {
+    mycatVideoTeardown = null;
+    if (typeof mycatEscapeTeardown === "function") {
       try {
-        sleepingDogEscapeTeardown();
+        mycatEscapeTeardown();
       } catch (e) {
-        log("Sleeping dog escape teardown error:", e);
+        log("My cat escape teardown error:", e);
       }
     }
-    sleepingDogEscapeTeardown = null;
-    sleepingDogAllowSkip = false;
+    mycatEscapeTeardown = null;
+    mycatAllowSkip = false;
   }
 
   /**
-   * Escape skips only when allowSkip — registered before freezePage() capture listeners
+   * Escape skips when allowSkip — registered before freezePage() capture listeners
    * so Escape still works while the host page is input-frozen.
    */
-  function registerSleepingDogEscapeHandler(allowSkip) {
-    sleepingDogAllowSkip = !!allowSkip;
+  function registerMycatEscapeHandler(allowSkip) {
+    mycatAllowSkip = !!allowSkip;
     if (!allowSkip) return () => {};
     const onKeyDown = (e) => {
-      if (activeBreakScreen !== "sleepingdog" || !sleepingDogAllowSkip || !overlayEl) return;
+      if (activeBreakScreen !== "mycat" || !mycatAllowSkip || !overlayEl) return;
       if (e.key !== "Escape") return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      log("Sleeping dog: skip via Escape.");
+      log("My cat: skip via Escape.");
       void chrome.runtime.sendMessage({ type: "SKIP_BREAK" }).catch(() => {});
       removeOverlay();
     };
@@ -596,227 +577,158 @@
     };
   }
 
+  /** Extension page loaded in iframe — host CSP cannot block media inside extension origin. */
+  const MYCAT_PLAYER_HTML = "mycat-player.html";
+  const MYCAT_PLAYER_JS = "mycat-player.js";
+
   /**
-   * Native loop + muted autoplay. One URL at a time: on decode/network error we advance — avoids a stuck
-   * black decode layer from an unsupported codec. `loadeddata` reveals after first frame (works with opacity fade).
+   * Embeds mycat-player.html in #fg-mycat-slot (actual `<video>` lives in extension iframe).
    */
-  function setupSleepingDogVideo(overlayRoot) {
-    const root = overlayRoot;
-    const errEl = overlayRoot.querySelector("#fg-sleepingdog-error");
-
-    const slot = overlayRoot.querySelector("#fg-sleepingdog-video-slot");
-    slot?.querySelector("#fg-sleepingdog-video-mount")?.remove();
-
-    const shell = document.createElement("div");
-    shell.id = "fg-sleepingdog-video-mount";
-    shell.className = "fg-sleepingdog-video-shell";
-    shell.setAttribute("aria-hidden", "true");
-
-    const pedestal = document.createElement("div");
-    pedestal.className = "fg-sleepingdog-pedestal";
-    pedestal.setAttribute("aria-hidden", "true");
-
-    const stage = document.createElement("div");
-    stage.className = "fg-sleepingdog-video-stage";
-
-    const video = document.createElement("video");
-    video.id = "fg-sleepingdog-video";
-    video.className = "fg-sleepingdog-video";
-    video.setAttribute("muted", "");
-    video.setAttribute("autoplay", "");
-    video.setAttribute("loop", "");
-    video.setAttribute("playsinline", "");
-    video.setAttribute("preload", "metadata");
-    video.setAttribute("disablePictureInPicture", "");
-    video.setAttribute("disableRemotePlayback", "");
-    video.muted = true;
-    stage.appendChild(video);
-    shell.appendChild(pedestal);
-    shell.appendChild(stage);
-
-    if (slot) {
-      slot.appendChild(shell);
-    } else {
-      overlayRoot.insertBefore(shell, overlayRoot.firstChild);
+  function setupMycatVideo(overlayRoot) {
+    const slot = overlayRoot.querySelector("#fg-mycat-slot");
+    const wrap = overlayRoot.querySelector(".fg-mycat-wrap");
+    if (!slot) {
+      log("My cat: #fg-mycat-slot missing — markup mismatch.");
+      return () => {};
     }
 
+    webAccessibleAssetsCache = null;
     const allowed = getWebAccessibleAssets();
-    const candidates = SLEEPING_DOG_VIDEO_SOURCES.filter((s) => allowed.has(s.file));
+    if (!allowed.has("assets/cat_lolo.mp4")) {
+      log("My cat: add assets/cat_lolo.mp4 to web_accessible_resources (H.264 MP4).");
+    }
 
-    const onVisibility = () => {
-      if (!video.isConnected) return;
-      const hidden = document.hidden;
-      video.style.animationPlayState = hidden ? "paused" : "running";
-      if (hidden) {
-        video.pause();
-      } else {
-        void video.play().catch(() => {});
-      }
-    };
-
-    let nextIndex = 0;
-    let onErr = null;
-    let onReady = null;
-
-    const detachAttemptListeners = () => {
-      if (onErr) {
-        video.removeEventListener("error", onErr);
-        onErr = null;
-      }
-      if (onReady) {
-        video.removeEventListener("loadeddata", onReady);
-        video.removeEventListener("canplay", onReady);
-        onReady = null;
-      }
-    };
-
-    const markReady = () => {
-      if (!root.isConnected) return;
-      root.classList.remove("fg-sleepingdog--video-failed");
-      root.classList.add("fg-sleepingdog--video-ready");
-      shell.classList.add("fg-sleepingdog--shell-ready");
-      if (errEl) errEl.hidden = true;
-    };
-
-    const markFailed = () => {
-      if (!root.isConnected) return;
-      root.classList.remove("fg-sleepingdog--video-ready");
-      shell.classList.remove("fg-sleepingdog--shell-ready");
-      root.classList.add("fg-sleepingdog--video-failed");
-      if (errEl) {
-        errEl.hidden = false;
-        errEl.textContent =
-          "No sleeping-dog video found. Add assets/sleeping-dog.mp4 (H.264), declare it in manifest.json, and reload.";
-      }
-    };
-
-    const tryNextSource = () => {
-      detachAttemptListeners();
-      if (nextIndex >= candidates.length) {
-        log("Sleeping dog: all video sources failed.");
-        markFailed();
-        return;
-      }
-      const spec = candidates[nextIndex];
-      nextIndex += 1;
-      log("Sleeping dog: loading", spec.file);
-
-      onReady = () => {
-        detachAttemptListeners();
-        markReady();
-      };
-      video.addEventListener("loadeddata", onReady, { once: true });
-      video.addEventListener("canplay", onReady, { once: true });
-
-      onErr = () => {
-        detachAttemptListeners();
-        log("Sleeping dog: error for", spec.file);
-        video.removeAttribute("src");
-        video.load();
-        tryNextSource();
-      };
-      video.addEventListener("error", onErr, { once: true });
-
-      video.src = chrome.runtime.getURL(spec.file);
-      video.load();
-      void video.play().catch(() => {});
-    };
-
-    if (!candidates.length) {
-      log("Sleeping dog: no video sources in manifest.");
-      shell.remove();
-      root.classList.remove("fg-sleepingdog--video-ready");
-      root.classList.add("fg-sleepingdog--video-failed");
-      if (errEl) {
-        errEl.hidden = false;
-        errEl.textContent =
-          "No sleeping-dog sources in manifest. Add assets/sleeping-dog.mp4 (and/or .webm) to web_accessible_resources.";
-      }
+    if (!allowed.has(MYCAT_PLAYER_HTML) || !allowed.has(MYCAT_PLAYER_JS)) {
+      log(
+        "My cat: add",
+        MYCAT_PLAYER_HTML,
+        "and",
+        MYCAT_PLAYER_JS,
+        "to web_accessible_resources, then reload the extension."
+      );
+      slot.textContent = "";
+      const err = document.createElement("p");
+      err.className = "fg-mycat-error";
+      err.textContent =
+        "Player files missing from manifest. Add mycat-player.html and mycat-player.js to web_accessible_resources.";
+      slot.appendChild(err);
       return () => {
-        root.classList.remove("fg-sleepingdog--video-ready", "fg-sleepingdog--video-failed");
-        overlayRoot.querySelector("#fg-sleepingdog-video-mount")?.remove();
-        if (errEl) {
-          errEl.hidden = true;
-          errEl.textContent = "";
-        }
+        slot.textContent = "";
       };
     }
 
-    document.addEventListener("visibilitychange", onVisibility);
-    tryNextSource();
+    slot.textContent = "";
+    slot.classList.add("fg-mycat-slot--video");
+
+    const iframe = document.createElement("iframe");
+    iframe.className = "fg-mycat-iframe";
+    iframe.setAttribute("title", "Cat break video");
+    iframe.setAttribute("allow", "autoplay; fullscreen");
+    iframe.src = chrome.runtime.getURL(MYCAT_PLAYER_HTML);
+    log("My cat: iframe player", iframe.src, "(open DevTools → Console for [FocusGuard mycat-player] logs)");
+
+    const onIframeLoad = () => {
+      if (!slot.isConnected) return;
+      slot.classList.add("fg-mycat-slot--ready");
+      wrap?.classList.add("fg-mycat-wrap--video-ready");
+    };
+    iframe.addEventListener("load", onIframeLoad);
+
+    slot.appendChild(iframe);
 
     return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      detachAttemptListeners();
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-      shell.remove();
-      root.classList.remove("fg-sleepingdog--video-ready", "fg-sleepingdog--video-failed");
-      if (errEl) {
-        errEl.hidden = true;
-        errEl.textContent = "";
-      }
-      nextIndex = 0;
+      iframe.removeEventListener("load", onIframeLoad);
+      slot.textContent = "";
+      slot.classList.remove("fg-mycat-slot--video", "fg-mycat-slot--ready");
+      wrap?.classList.remove("fg-mycat-wrap--video-ready");
     };
-  }
-
-  /** Video-only premium break: no timer card, no visible chrome (Escape skips if allowed). */
-  function buildSleepingDogOverlay(allowSkip) {
-    const overlay = document.createElement("div");
-    overlay.id = "fg-overlay";
-    overlay.classList.add("fg-theme-sleepingdog");
-    overlay.setAttribute("role", "dialog");
-    overlay.setAttribute("aria-modal", "true");
-    overlay.setAttribute("aria-label", "Focus break — sleeping dog");
-    overlay.setAttribute("tabindex", "-1");
-
-    const skipHint =
-      allowSkip
-        ? '<p class="fg-sr-only">Break in progress. Press Escape to skip this break.</p>'
-        : "";
-
-    const skipHud = allowSkip
-      ? `
-        <div class="fg-sleepingdog-glass fg-sleepingdog-skip-hint" role="status">
-          <span class="fg-sleepingdog-skip-hint__label">Press</span>
-          <kbd class="fg-sleepingdog-kbd" aria-hidden="true">Esc</kbd>
-          <span class="fg-sleepingdog-skip-hint__label">to skip</span>
-        </div>`
-      : "";
-
-    overlay.innerHTML = `
-      ${skipHint}
-      <div class="fg-sleepingdog-fallback" aria-hidden="true"></div>
-      <div class="fg-sleepingdog-dim" aria-hidden="true"></div>
-      <div id="fg-sleepingdog-video-slot" class="fg-sleepingdog-video-slot"></div>
-      <div class="fg-sleepingdog-atmosphere" aria-hidden="true"></div>
-      <div class="fg-sleepingdog-ui-stack">
-        ${skipHud}
-        <p id="fg-sleepingdog-error" class="fg-sleepingdog-error fg-sleepingdog-glass" role="status" hidden></p>
-      </div>
-    `;
-
-    return overlay;
   }
 
   // ─── Overlay ─────────────────────────────────────────────────────────────────
 
-  /** Premium “Breath in breath out” — full illustration (styles in overlay.css). */
+  /** My cat — modal + iframe clip + centered copy / skip. */
+  function buildMycatVideoOnlyOverlay(allowSkip) {
+    const overlay = document.createElement("div");
+    overlay.id = "fg-overlay";
+    overlay.classList.add("fg-theme-mycat", "fg-theme-mycat--video-only");
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Focus break — cat video");
+    overlay.setAttribute("tabindex", "-1");
+    const srHint = allowSkip
+      ? '<p class="fg-sr-only">Break in progress. Press Escape to skip this break.</p>'
+      : "";
+    const skipMarkup = allowSkip
+      ? `<button id="fg-skip-btn" type="button" aria-label="Skip this break">Skip break</button>`
+      : "";
+    const timerMarkup = `
+      <div id="fg-timer-wrapper" aria-live="polite" aria-label="Time remaining">
+        <div id="fg-timer-label">back in</div>
+        <div id="fg-countdown">00:00</div>
+      </div>
+    `;
+    overlay.innerHTML = `
+      ${srHint}
+      <div class="fg-mycat-viewport">
+        <div class="fg-mycat-modal">
+          <div class="fg-mycat-media">
+            <div id="fg-animation-container" class="fg-mycat-wrap">
+              <div id="fg-mycat-slot"></div>
+            </div>
+            <div class="fg-mycat-copy">
+              <div class="fg-mycat-copy-inner">
+                <div id="fg-eyebrow">Focus Guard</div>
+                <p id="fg-subtext">Enjoy the clip. Skip when you are ready to return.</p>
+                ${timerMarkup}
+                ${skipMarkup}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    if (allowSkip) {
+      const skipBtn = overlay.querySelector("#fg-skip-btn");
+      if (skipBtn) {
+        skipBtn.addEventListener(
+          "click",
+          async (e) => {
+            e.stopImmediatePropagation();
+            log("My cat: skip break clicked.");
+            try {
+              await chrome.runtime.sendMessage({ type: "SKIP_BREAK" });
+            } catch (err) {
+              log("Skip message error:", err);
+            }
+            removeOverlay();
+          },
+          { capture: true }
+        );
+      }
+    }
+
+    return overlay;
+  }
+
+  /** Premium “Breath in breath out” — small logo art + orb focal point (styles in overlay.css). */
   function getBreathScreenMarkup() {
-    const breathArtSrc = chrome.runtime.getURL("assets/breath-break-art.png");
+    const breathLogoSrc = chrome.runtime.getURL("assets/breath-break-art.png");
     return `
-        <div id="fg-animation-container" class="fg-breath-wrap fg-breath-wrap--art-only" aria-hidden="true">
-          <div class="fg-breath-art-wrap">
-            <img class="fg-breath-art" src="${breathArtSrc}" alt="Meditation pose — breathe in, breathe out." width="640" height="640" decoding="async" />
+        <div id="fg-animation-container" class="fg-breath-wrap fg-breath-wrap--logo-and-orb" aria-hidden="true">
+          <div class="fg-breath-logo-wrap" aria-hidden="true">
+            <img class="fg-breath-logo" src="${breathLogoSrc}" alt="" width="120" height="120" decoding="async" />
+          </div>
+          <div class="fg-breath-orb-wrap">
+            <div id="fg-orb"></div>
           </div>
         </div>
       `;
   }
 
   function buildOverlay(endsAt, allowSkip, breakScreen) {
-    if (breakScreen === "sleepingdog") {
-      return buildSleepingDogOverlay(allowSkip);
+    if (breakScreen === "mycat") {
+      return buildMycatVideoOnlyOverlay(allowSkip);
     }
 
     const overlay = document.createElement("div");
@@ -838,12 +750,14 @@
           : "";
     const premiumPlaceholder = getPremiumPlaceholderTheme(breakScreen);
     const astronautSrc = isSpaceTheme ? chrome.runtime.getURL("assets/astronaut-float.png") : "";
-    const catStretchLogoSrc = isCatTheme ? chrome.runtime.getURL("assets/cat-stretch-logo.png") : "";
+    const dumpCatLogoSrc = isCatTheme
+      ? chrome.runtime.getURL("assets/dump-cat-logo.png")
+      : "";
     const catCssAnimMarkup = isCatTheme
       ? `
-        <div id="fg-animation-container" class="fg-cat-wrap fg-cat-wrap--with-logo" aria-hidden="true">
-          <div class="fg-cat-logo-wrap" aria-hidden="true">
-            <img class="fg-cat-logo" src="${catStretchLogoSrc}" alt="" width="120" height="120" decoding="async" />
+        <div id="fg-animation-container" class="fg-cat-wrap" aria-hidden="true">
+          <div class="fg-dump-cat-logo-wrap" aria-hidden="true">
+            <img class="fg-dump-cat-logo" src="${dumpCatLogoSrc}" alt="" width="200" height="200" decoding="async" />
           </div>
           <div class="cat-container">
             <div class="cat">
@@ -907,6 +821,7 @@
       ? `
           <div id="fg-eyebrow">Focus Guard</div>
           <h1 id="fg-headline">${premiumPlaceholder.headline}</h1>
+          ${premiumPlaceholder.subtext ? `<p id="fg-subtext">${premiumPlaceholder.subtext}</p>` : ""}
         `
       : `
           <div id="fg-eyebrow">Focus Guard</div>
@@ -932,25 +847,27 @@
           </div>
         `;
 
-    overlay.innerHTML = `
-      <div id="fg-panel">
-
-        ${animationMarkup}
-
-        <div id="fg-content">
-          ${contentTopMarkup}
-
-          ${timerMarkup}
-
-          ${quoteControlsMarkup}
-
-          ${allowSkip ? `
+    const skipBtnMarkup = allowSkip
+      ? `
           <button id="fg-skip-btn" type="button" aria-label="Skip this break">
             Skip break
           </button>
-          ` : ""}
-        </div>
+          `
+      : "";
 
+    const panelInner = `
+        ${animationMarkup}
+        <div id="fg-content">
+          ${contentTopMarkup}
+          ${timerMarkup}
+          ${quoteControlsMarkup}
+          ${skipBtnMarkup}
+        </div>
+      `;
+
+    overlay.innerHTML = `
+      <div id="fg-panel">
+        ${panelInner}
       </div>
       ${
         isSpaceTheme
@@ -1132,9 +1049,9 @@
     // Show overlay immediately so it always captures hits (opacity 0 can let clicks through).
     overlayEl.classList.add("fg-visible");
 
-    if (activeBreakScreen === "sleepingdog") {
-      sleepingDogEscapeTeardown = registerSleepingDogEscapeHandler(allowSkip);
-      sleepingDogVideoTeardown = setupSleepingDogVideo(overlayEl);
+    if (activeBreakScreen === "mycat") {
+      mycatEscapeTeardown = registerMycatEscapeHandler(allowSkip);
+      mycatVideoTeardown = setupMycatVideo(overlayEl);
       requestAnimationFrame(() => {
         try {
           overlayEl.focus({ preventScroll: true });
@@ -1184,7 +1101,7 @@
     if (!overlayEl) return;
 
     teardownGiphySkipProximity();
-    teardownSleepingDogMedia();
+    teardownMycatMedia();
 
     overlayEl.classList.remove("fg-visible");
     overlayEl.classList.add("fg-hiding");

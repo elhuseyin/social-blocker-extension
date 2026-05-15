@@ -9,8 +9,7 @@ const PREMIUM_BREAK_SCREENS = new Set([
   "space",
   "cooked",
   "breath",
-  "mycat",
-  "sleepingdog"
+  "mycat"
 ]);
 
 /** Known break themes only — never pass arbitrary storage strings into DOM/class names. */
@@ -26,12 +25,18 @@ export function sanitizeBreakScreenId(screen) {
   return raw;
 }
 
-/** One-time migration from legacy dev_mode key. */
+/** One-time migration from legacy dev_mode key (single flight — avoids repeated reads). */
+let migrateLegacyDevModePromise = null;
 async function migrateLegacyDevMode() {
-  const { dev_mode } = await chrome.storage.local.get("dev_mode");
-  if (dev_mode === true) {
-    await chrome.storage.local.set({ devMode: true, dev_mode: false });
+  if (!migrateLegacyDevModePromise) {
+    migrateLegacyDevModePromise = (async () => {
+      const { dev_mode } = await chrome.storage.local.get("dev_mode");
+      if (dev_mode === true) {
+        await chrome.storage.local.set({ devMode: true, dev_mode: false });
+      }
+    })();
   }
+  return migrateLegacyDevModePromise;
 }
 
 export async function getEntitlements() {
@@ -55,9 +60,17 @@ export function isPremiumBreakScreen(screen) {
   return PREMIUM_BREAK_SCREENS.has(screen || "");
 }
 
-export async function resolveBreakScreen(screen) {
-  const { isSubscribed } = await getEntitlements();
-  let id = sanitizeBreakScreenId(screen);
+/**
+ * Resolve stored break screen id without async storage (caller supplies subscription flag).
+ * Use from popup after a batched storage read or from background with a cached flag.
+ */
+export function resolveBreakScreenSync(screen, isSubscribed) {
+  const id = sanitizeBreakScreenId(screen);
   if (isPremiumBreakScreen(id) && !isSubscribed) return "default";
   return id;
+}
+
+export async function resolveBreakScreen(screen) {
+  const { isSubscribed } = await getEntitlements();
+  return resolveBreakScreenSync(screen, isSubscribed);
 }

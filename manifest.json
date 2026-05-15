@@ -4,6 +4,8 @@
   "version": "1.0.0",
   "description": "Take mindful breaks from social media. Track your time, schedule breaks, and stay focused.",
 
+  "minimum_chrome_version": "92",
+
   "permissions": [
     "storage",
     "tabs",
@@ -63,9 +65,12 @@
         "assets/astronaut-float.png",
         "assets/reset-mind-logo.png",
         "assets/dopamine-detox-logo.png",
-        "assets/cat-stretch-logo.png",
+        "assets/dump-cat-logo.png",
         "assets/breath-break-art.png",
-        "assets/were-cooked-logo.png"
+        "assets/were-cooked-logo.png",
+        "assets/cat_lolo.mp4",
+        "mycat-player.html",
+        "mycat-player.js"
       ],
       "matches": ["<all_urls>"]
     }

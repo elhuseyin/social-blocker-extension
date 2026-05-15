@@ -68,15 +68,16 @@ export function aggregateDailySocialToHoursByWeekday(byDate, weekStart, weekEndE
 }
 
 /**
+ * Build weekly summary from raw `socialUsageDaily` storage value (skips storage I/O when prefetched).
+ * @param {unknown} rawSocialUsageDaily
  * @param {number} weekOffset
- * @returns {Promise<{ byDay: Record<string, number>, totalHours: number, hasData: boolean, weekStart: number, weekEnd: number }>}
  */
-export async function getWeeklyUsageSummary(weekOffset = 0) {
+export function buildWeeklySummaryFromRaw(rawSocialUsageDaily, weekOffset = 0) {
   const { start, end } = getWeekBounds(weekOffset);
-  const data = await chrome.storage.local.get(SOCIAL_USAGE_DAILY_KEY);
-  const raw = data[SOCIAL_USAGE_DAILY_KEY];
   const byDate =
-    raw && typeof raw === "object" && !Array.isArray(raw) ? /** @type {Record<string, Record<string, number>>} */ (raw) : {};
+    rawSocialUsageDaily && typeof rawSocialUsageDaily === "object" && !Array.isArray(rawSocialUsageDaily)
+      ? /** @type {Record<string, Record<string, number>>} */ (rawSocialUsageDaily)
+      : {};
   const byDay = aggregateDailySocialToHoursByWeekday(byDate, start, end);
   const totalHours = WEEKDAY_ORDER.reduce((acc, d) => acc + (byDay[d] || 0), 0);
   const hasData = totalHours > 0.001;
@@ -88,4 +89,17 @@ export async function getWeeklyUsageSummary(weekOffset = 0) {
     weekStart: start,
     weekEnd: end
   };
+}
+
+/**
+ * @param {number} weekOffset
+ * @param {unknown} [prefetchedSocialUsageDaily] if set, skips chrome.storage read (popup batch path).
+ * @returns {Promise<{ byDay: Record<string, number>, totalHours: number, hasData: boolean, weekStart: number, weekEnd: number }>}
+ */
+export async function getWeeklyUsageSummary(weekOffset = 0, prefetchedSocialUsageDaily) {
+  if (prefetchedSocialUsageDaily !== undefined) {
+    return buildWeeklySummaryFromRaw(prefetchedSocialUsageDaily, weekOffset);
+  }
+  const data = await chrome.storage.local.get(SOCIAL_USAGE_DAILY_KEY);
+  return buildWeeklySummaryFromRaw(data[SOCIAL_USAGE_DAILY_KEY], weekOffset);
 }

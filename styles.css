@@ -4,9 +4,7 @@
  * editorial typography pairing, precise spatial rhythm.
  */
 
-/* ── Fonts ─────────────────────────────────────────────────────────────── */
-
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap');
+/* All fonts are local/system — no remote @import (Chrome Web Store / MV3 CSP). */
 
 /* ── Tokens ────────────────────────────────────────────────────────────── */
 
@@ -31,9 +29,9 @@
   --radius-md:    12px;
   --radius-lg:    16px;
 
-  --font-display: 'DM Serif Display', serif;
-  --font-sans:    'DM Sans', sans-serif;
-  --font-mono:    'DM Mono', 'Courier New', monospace;
+  --font-display: Georgia, 'Times New Roman', ui-serif, serif;
+  --font-sans:    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono:    ui-monospace, 'Cascadia Code', 'Consolas', 'Courier New', monospace;
 
   --popup-width:  340px;
 }
@@ -117,12 +115,13 @@ body {
   background: radial-gradient(circle at 35% 35%, #c4b5fd, #7c3aed 70%);
   box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
   flex-shrink: 0;
+  transform: translateZ(0);
   animation: orb-pulse 3s ease-in-out infinite;
 }
 
 @keyframes orb-pulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.4); }
-  50%       { box-shadow: 0 0 20px rgba(139, 92, 246, 0.65); }
+  0%, 100% { transform: translateZ(0) scale(1); opacity: 1; }
+  50%       { transform: translateZ(0) scale(1.04); opacity: 0.92; }
 }
 
 .header-text {
@@ -209,6 +208,10 @@ body {
 }
 
 /* ── Status bar ────────────────────────────────────────────────────────── */
+
+.status-bar--pending {
+  opacity: 0.9;
+}
 
 .status-bar {
   display: flex;
@@ -337,14 +340,9 @@ body {
 
 .site-usage-item {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 98px auto;
+  grid-template-columns: minmax(0, 1fr) 98px auto;
   align-items: center;
   gap: 8px;
-}
-
-.site-usage-icon {
-  font-size: 12px;
-  text-align: center;
 }
 
 .site-usage-domain {
@@ -710,13 +708,6 @@ body {
   justify-content: space-between;
 }
 
-.domain-favicon {
-  font-size: 12px;
-  flex-shrink: 0;
-  width: 16px;
-  text-align: center;
-}
-
 .domain-text {
   flex: 1;
   overflow: hidden;
@@ -957,27 +948,6 @@ body {
   padding: 8px 10px;
 }
 
-.btn-billing-refresh {
-  display: block;
-  width: 100%;
-  margin-top: 4px;
-  padding: 6px 8px;
-  border: none;
-  background: transparent;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.btn-billing-refresh:hover {
-  color: var(--accent);
-}
-
 .subscribe-copy--premium {
   font-size: 14px;
   color: var(--success);
@@ -1082,10 +1052,34 @@ body {
   min-height: 212px;
 }
 
-/* Locked: show a sharp chart preview (same data shape); block hover/tooltip only */
+/* Locked: blur chart so values are not readable; block hover/tooltip */
 .analytics-chart-inner--locked {
   pointer-events: none;
   user-select: none;
+  filter: blur(12px);
+  -webkit-filter: blur(12px);
+  transform: translateZ(0);
+}
+
+.analytics-chart-inner--skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 14px 12px 18px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.07) 42%,
+    rgba(255, 255, 255, 0.03) 85%
+  );
+  background-size: 200% 100%;
+  animation: fg-chart-skeleton 1.1s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes fg-chart-skeleton {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
 }
 
 .weekly-break-chart {
@@ -1126,7 +1120,8 @@ body {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: transparent;
+  /* Dim over already-blurred chart; keeps CTA readable */
+  background: rgba(17, 18, 22, 0.38);
   z-index: 3;
   pointer-events: none;
 }

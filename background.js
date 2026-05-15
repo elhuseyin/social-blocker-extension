@@ -79,9 +79,18 @@ const LOG_PREFIX         = "[FocusGuard BG]";
 
 // ─── State (in-memory; rebuilt from storage on SW wake) ──────────────────────
 
+/** Cached for GET_STATUS — avoids getEntitlements() + storage on every popup poll. */
+let entitlementsSnapshot = { isSubscribed: false, devMode: false, stripeSubscribed: false };
+
+async function refreshEntitlementsSnapshot() {
+  entitlementsSnapshot = await getEntitlements();
+}
+
 let state = {
   activeTabId:       null,   // currently focused tab id
   activeTabDomain:   null,   // domain of active tab (if blocked)
+  /** Last known URL of the focused tab (for break overlay / BREAK_TICK on any site). */
+  activeTabUrl:      "",
   lastTickTime:      Date.now(),   // Date.now() at last tick — initialized so first elapsed is valid
   breakActive:       false,  // is a break currently running?
   breakEndsAt:       null,   // epoch ms when break ends
@@ -230,6 +239,11 @@ async function sendBreakMessageToTab(tabId, message) {
     logLastError(`sendBreakMessageToTab second send tab ${tabId} type ${message.type}`);
     log("sendBreakMessageToTab: second sendMessage failed", tabId, err2?.message || err2);
   }
+}
+
+/** True for normal web pages where the content script can run (http/https). */
+function isHttpPageUrl(url) {
+  return typeof url === "string" && /^https?:\/\//i.test(url);
 }
 
 /** Extract eTLD+1-like domain from a URL string, or null. */
@@ -389,7 +403,7 @@ async function startBreak() {
   await persistState();
   log("Break started. Ends at:", new Date(state.breakEndsAt).toISOString());
   const breakScreen = await resolveBreakScreen(state.settings.breakScreen);
-  await notifyAllBlockedTabs("START_BREAK", {
+  await notifyAllWebPageTabs("START_BREAK", {
     endsAt: state.breakEndsAt,
     allowSkip: state.settings.allowSkip,
     breakScreen
@@ -410,7 +424,7 @@ async function endBreak(skipped = false) {
 
   await persistState();
   await applyPendingBreakScreenIfAny();
-  await notifyAllBlockedTabs("END_BREAK", {});
+  await notifyAllWebPageTabs("END_BREAK", {});
 
   if (state.settings.enabled && state.activeTabDomain) {
     startSocialSession(state.activeTabDomain, Date.now());
@@ -429,19 +443,18 @@ async function applyPendingBreakScreenIfAny() {
   log("Applied pending break screen:", resolved);
 }
 
-/** Send a message to the content script of every tab on a blocked domain. */
-async function notifyAllBlockedTabs(type, payload) {
+/** Send a break message to every tab showing a normal web page (http/https). */
+async function notifyAllWebPageTabs(type, payload) {
   try {
     const tabs = await chrome.tabs.query({});
     const message = { type, ...payload };
     for (const tab of tabs) {
-      const domain = extractDomain(tab.url);
-      if (isBlockedDomain(domain)) {
+      if (isHttpPageUrl(tab.url)) {
         await sendBreakMessageToTab(tab.id, message);
       }
     }
   } catch (err) {
-    log("notifyAllBlockedTabs error:", err);
+    log("notifyAllWebPageTabs error:", err);
   }
 }
 
@@ -471,7 +484,7 @@ async function onTick() {
       await endBreak(false);
     }
     // Keep notifying the active tab so its countdown stays fresh after navigations
-    if (state.breakActive && state.activeTabId && isBlockedDomain(state.activeTabDomain)) {
+    if (state.breakActive && state.activeTabId && isHttpPageUrl(state.activeTabUrl)) {
       const breakScreen = await resolveBreakScreen(state.settings.breakScreen);
       await notifyTab(state.activeTabId, "BREAK_TICK", {
         endsAt:    state.breakEndsAt,
@@ -526,6 +539,7 @@ async function handleTabChange(tabId, url) {
 
   state.activeTabId     = tabId;
   state.activeTabDomain = newBlockedDomain;
+  state.activeTabUrl    = url || "";
   // Reset the tick baseline so we don't count time spent in other tabs
   state.lastTickTime    = t;
 
@@ -535,8 +549,8 @@ async function handleTabChange(tabId, url) {
     startSocialSession(newBlockedDomain, t);
   }
 
-  // If a break is already active and the user navigated to a blocked site, re-trigger overlay
-  if (state.breakActive && state.activeTabDomain) {
+  // If a break is already active, show overlay on this tab for any normal web page
+  if (state.breakActive && state.breakEndsAt && isHttpPageUrl(url)) {
     const breakScreen = await resolveBreakScreen(state.settings.breakScreen);
     await notifyTab(tabId, "START_BREAK", {
       endsAt:    state.breakEndsAt,
@@ -560,7 +574,18 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status !== "complete") return;
 
-  // Only care about the currently active tab
+  // During a break, any tab that finishes loading a web page should get the overlay
+  // (e.g. new tab opened in the background, then navigated to a site).
+  if (state.breakActive && state.breakEndsAt && isHttpPageUrl(tab.url)) {
+    const breakScreen = await resolveBreakScreen(state.settings.breakScreen);
+    await notifyTab(tabId, "START_BREAK", {
+      endsAt:    state.breakEndsAt,
+      allowSkip: state.settings.allowSkip,
+      breakScreen
+    });
+  }
+
+  // Only care about the currently active tab for focus / usage tracking
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!activeTab || activeTab.id !== tabId) return;
 
@@ -573,6 +598,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     await flushSocialSession(Date.now());
     state.activeTabId = null;
     state.activeTabDomain = null;
+    state.activeTabUrl = "";
     state.lastTickTime = null;
   })();
 });
@@ -583,6 +609,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
     await flushSocialSession(Date.now());
     state.activeTabId    = null;
     state.activeTabDomain = null;
+    state.activeTabUrl   = "";
     state.lastTickTime   = null;
     return;
   }
@@ -609,15 +636,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (syncUsageToCalendarDay(Date.now())) {
           await persistState();
         }
-        const { isSubscribed, devMode } = await getEntitlements();
         sendResponse({
           breakActive:   state.breakActive,
           breakEndsAt:   state.breakEndsAt,
           usage:         state.usage,
           settings:      state.settings,
           activeDomain:  state.activeTabDomain,
-          isSubscribed,
-          devMode
+          isSubscribed:  entitlementsSnapshot.isSubscribed,
+          devMode:       entitlementsSnapshot.devMode
         });
         break;
       }
@@ -667,6 +693,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.settings || changes.devMode || changes.subscribed || changes.dev_mode) {
     void normalizeBreakScreenInState();
   }
+  if (changes.devMode || changes.subscribed || changes.dev_mode) {
+    void refreshEntitlementsSnapshot();
+  }
 });
 
 // ─── Alarm (SW keepalive only — Chrome MV3 SWs die after ~30s of inactivity) ──
@@ -699,6 +728,7 @@ async function safeOnTick() {
 async function init() {
   log("Service worker starting…");
   await loadState();
+  await refreshEntitlementsSnapshot();
 
   // ── Create keepalive alarm (minimum 1 minute — just prevents SW from dying) ──
   const existing = await chrome.alarms.get(TICK_INTERVAL_NAME);
@@ -720,7 +750,7 @@ async function init() {
     } else {
       log("Resuming active break from storage.");
       const breakScreen = await resolveBreakScreen(state.settings.breakScreen);
-      await notifyAllBlockedTabs("START_BREAK", {
+      await notifyAllWebPageTabs("START_BREAK", {
         endsAt:    state.breakEndsAt,
         allowSkip: state.settings.allowSkip,
         breakScreen
